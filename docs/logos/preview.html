@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Headroom — logo previews</title>
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+      background: #fafafa;
+      color: #111;
+      padding: 48px 24px 96px;
+    }
+    h1 { font-size: 22px; margin: 0 0 4px; font-weight: 600; letter-spacing: -0.01em; }
+    .sub { color: #86868b; margin-bottom: 40px; font-size: 13px; }
+    .row {
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      gap: 32px;
+      padding: 32px 0;
+      border-top: 1px solid #e5e5e7;
+      align-items: center;
+    }
+    .meta h2 { margin: 0 0 4px; font-size: 16px; font-weight: 600; }
+    .meta p { margin: 0; color: #86868b; font-size: 13px; }
+    .sizes { display: flex; gap: 32px; align-items: flex-end; }
+    .swatch { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    .swatch span { font-size: 11px; color: #86868b; }
+    .light, .dark, .accent { display: inline-flex; align-items: center; justify-content: center; }
+    .light { background: #fff; color: #111; border-radius: 12px; }
+    .dark  { background: #111; color: #fff; border-radius: 12px; }
+    .accent { background: #fff; color: #0071e3; border-radius: 12px; }
+    .menubar-strip {
+      display: inline-flex; gap: 14px; align-items: center;
+      background: rgba(0,0,0,0.85); color: #fff;
+      padding: 6px 12px; border-radius: 8px; font-size: 12px;
+    }
+    .menubar-strip svg { display: block; }
+    .footer { margin-top: 48px; color: #86868b; font-size: 12px; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #1a1a1c; color: #f5f5f7; }
+      .row { border-top-color: #2c2c2e; }
+      .sub, .meta p, .swatch span, .footer { color: #98989d; }
+    }
+  </style>
+</head>
+<body>
+
+<h1>Headroom — logo concepts</h1>
+<p class="sub">Three directions, rendered at app-icon, favicon, and menu-bar sizes. Pick one.</p>
+
+<!-- BRACKET -->
+<section class="row">
+  <div class="meta">
+    <h2>1 · Ceiling bracket</h2>
+    <p>A bar with a dot below — the gap is the headroom. Distinctive and reads at every size.</p>
+  </div>
+  <div class="sizes">
+    <div class="swatch">
+      <div class="light" style="width:128px;height:128px;padding:24px"><svg width="80" height="80" viewBox="0 0 256 256" fill="none"><path d="M40 96 V72 a16 16 0 0 1 16 -16 H200 a16 16 0 0 1 16 16 V96" stroke="currentColor" stroke-width="20" stroke-linecap="round"/><circle cx="128" cy="180" r="22" fill="currentColor"/></svg></div>
+      <span>128 / light</span>
+    </div>
+    <div class="swatch">
+      <div class="dark" style="width:128px;height:128px;padding:24px"><svg width="80" height="80" viewBox="0 0 256 256" fill="none"><path d="M40 96 V72 a16 16 0 0 1 16 -16 H200 a16 16 0 0 1 16 16 V96" stroke="currentColor" stroke-width="20" stroke-linecap="round"/><circle cx="128" cy="180" r="22" fill="currentColor"/></svg></div>
+      <span>128 / dark</span>
+    </div>
+    <div class="swatch">
+      <div class="light" style="width:64px;height:64px;padding:8px"><svg width="48" height="48" viewBox="0 0 256 256" fill="none"><path d="M40 96 V72 a16 16 0 0 1 16 -16 H200 a16 16 0 0 1 16 16 V96" stroke="currentColor" stroke-width="20" stroke-linecap="round"/><circle cx="128" cy="180" r="22" fill="currentColor"/></svg></div>
+      <span>48 favicon</span>
+    </div>
+    <div class="swatch">
+      <span class="menubar-strip"><svg width="14" height="14" viewBox="0 0 256 256" fill="none"><path d="M40 96 V72 a16 16 0 0 1 16 -16 H200 a16 16 0 0 1 16 16 V96" stroke="currentColor" stroke-width="20" stroke-linecap="round"/><circle cx="128" cy="180" r="22" fill="currentColor"/></svg> 54·32%</span>
+      <span>menu bar</span>
+    </div>
+  </div>
+</section>
+
+<!-- GAUGE -->
+<section class="row">
+  <div class="meta">
+    <h2>2 · Battery gauge</h2>
+    <p>Reads as "tracking depletion" instantly. Familiar — maybe too familiar (lots of apps use this).</p>
+  </div>
+  <div class="sizes">
+    <div class="swatch">
+      <div class="light" style="width:128px;height:128px;padding:24px"><svg width="80" height="80" viewBox="0 0 256 256" fill="none"><rect x="32" y="80" width="172" height="96" rx="22" stroke="currentColor" stroke-width="14"/><rect x="208" y="108" width="14" height="40" rx="6" fill="currentColor"/><rect x="48" y="96" width="102" height="64" rx="10" fill="currentColor"/></svg></div>
+      <span>128 / light</span>
+    </div>
+    <div class="swatch">
+      <div class="dark" style="width:128px;height:128px;padding:24px"><svg width="80" height="80" viewBox="0 0 256 256" fill="none"><rect x="32" y="80" width="172" height="96" rx="22" stroke="currentColor" stroke-width="14"/><rect x="208" y="108" width="14" height="40" rx="6" fill="currentColor"/><rect x="48" y="96" width="102" height="64" rx="10" fill="currentColor"/></svg></div>
+      <span>128 / dark</span>
+    </div>
+    <div class="swatch">
+      <div class="light" style="width:64px;height:64px;padding:8px"><svg width="48" height="48" viewBox="0 0 256 256" fill="none"><rect x="32" y="80" width="172" height="96" rx="22" stroke="currentColor" stroke-width="14"/><rect x="208" y="108" width="14" height="40" rx="6" fill="currentColor"/><rect x="48" y="96" width="102" height="64" rx="10" fill="currentColor"/></svg></div>
+      <span>48 favicon</span>
+    </div>
+    <div class="swatch">
+      <span class="menubar-strip"><svg width="14" height="14" viewBox="0 0 256 256" fill="none"><rect x="32" y="80" width="172" height="96" rx="22" stroke="currentColor" stroke-width="14"/><rect x="208" y="108" width="14" height="40" rx="6" fill="currentColor"/><rect x="48" y="96" width="102" height="64" rx="10" fill="currentColor"/></svg> 54·32%</span>
+      <span>menu bar</span>
+    </div>
+  </div>
+</section>
+
+<!-- H -->
+<section class="row">
+  <div class="meta">
+    <h2>3 · H wordmark</h2>
+    <p>Bold initial with the crossbar pushed up — the empty space above is the metaphor. Wordmark-friendly.</p>
+  </div>
+  <div class="sizes">
+    <div class="swatch">
+      <div class="light" style="width:128px;height:128px;padding:24px"><svg width="80" height="80" viewBox="0 0 256 256"><rect x="52" y="40" width="44" height="176" rx="6" fill="currentColor"/><rect x="160" y="40" width="44" height="176" rx="6" fill="currentColor"/><rect x="96" y="92" width="64" height="22" fill="currentColor"/></svg></div>
+      <span>128 / light</span>
+    </div>
+    <div class="swatch">
+      <div class="dark" style="width:128px;height:128px;padding:24px"><svg width="80" height="80" viewBox="0 0 256 256"><rect x="52" y="40" width="44" height="176" rx="6" fill="currentColor"/><rect x="160" y="40" width="44" height="176" rx="6" fill="currentColor"/><rect x="96" y="92" width="64" height="22" fill="currentColor"/></svg></div>
+      <span>128 / dark</span>
+    </div>
+    <div class="swatch">
+      <div class="light" style="width:64px;height:64px;padding:8px"><svg width="48" height="48" viewBox="0 0 256 256"><rect x="52" y="40" width="44" height="176" rx="6" fill="currentColor"/><rect x="160" y="40" width="44" height="176" rx="6" fill="currentColor"/><rect x="96" y="92" width="64" height="22" fill="currentColor"/></svg></div>
+      <span>48 favicon</span>
+    </div>
+    <div class="swatch">
+      <span class="menubar-strip"><svg width="14" height="14" viewBox="0 0 256 256"><rect x="52" y="40" width="44" height="176" rx="6" fill="currentColor"/><rect x="160" y="40" width="44" height="176" rx="6" fill="currentColor"/><rect x="96" y="92" width="64" height="22" fill="currentColor"/></svg> 54·32%</span>
+      <span>menu bar</span>
+    </div>
+  </div>
+</section>
+
+<p class="footer">Open this file in a browser: <code>open docs/logos/preview.html</code></p>
+
+</body>
+</html>

@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Headroom — Claude Code & Codex usage in your menu bar</title>
+  <meta name="description" content="A native macOS menu-bar app and widget that shows how much Claude Code and Codex CLI usage you have left.">
+  <meta property="og:title" content="Headroom">
+  <meta property="og:description" content="See your Claude Code and Codex headroom, live in your menu bar.">
+  <meta property="og:image" content="screenshots/hero.png">
+
+  <!-- Logo as favicon (currently: bracket — swap href to logos/gauge.svg or logos/h.svg to change) -->
+  <link rel="icon" type="image/svg+xml" href="logos/bracket.svg">
+
+  <style>
+    :root {
+      color-scheme: light dark;
+      --fg: #1d1d1f;
+      --fg-muted: #6e6e73;
+      --fg-faint: #86868b;
+      --bg: #ffffff;
+      --bg-soft: #fbfbfd;
+      --line: #d2d2d7;
+      --accent: #1d1d1f;
+      --radius: 18px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --fg: #f5f5f7;
+        --fg-muted: #a1a1a6;
+        --fg-faint: #86868b;
+        --bg: #000000;
+        --bg-soft: #1d1d1f;
+        --line: #2c2c2e;
+        --accent: #f5f5f7;
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font: 17px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, "Helvetica Neue", sans-serif;
+      color: var(--fg);
+      background: var(--bg);
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* Nav */
+    .nav {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .brand {
+      display: inline-flex; align-items: center; gap: 10px;
+      font-weight: 600; font-size: 17px; letter-spacing: -0.01em;
+    }
+    .brand svg { width: 24px; height: 24px; }
+    .nav-links { display: flex; gap: 24px; font-size: 14px; color: var(--fg-muted); }
+
+    /* Hero */
+    .hero {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 64px 24px 48px;
+      text-align: center;
+    }
+    .eyebrow {
+      font-size: 13px;
+      letter-spacing: 0.02em;
+      color: var(--fg-faint);
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+    h1 {
+      font-size: clamp(40px, 6vw, 64px);
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+      font-weight: 600;
+      margin: 0 0 20px;
+    }
+    h1 .grad {
+      background: linear-gradient(90deg, #1d1d1f 0%, #6e6e73 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    @media (prefers-color-scheme: dark) {
+      h1 .grad {
+        background: linear-gradient(90deg, #f5f5f7 0%, #a1a1a6 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+    }
+    .lede {
+      font-size: clamp(18px, 2vw, 21px);
+      line-height: 1.45;
+      color: var(--fg-muted);
+      max-width: 640px;
+      margin: 0 auto 32px;
+    }
+    .lede .live {
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      color: var(--fg);
+      background: var(--bg-soft);
+      padding: 1px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      font-size: 0.92em;
+    }
+
+    /* CTA */
+    .cta-row {
+      display: inline-flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 24px;
+      border-radius: 980px;
+      font-weight: 500;
+      font-size: 16px;
+      transition: opacity 0.15s, transform 0.15s;
+    }
+    .btn:hover { text-decoration: none; opacity: 0.85; }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary {
+      background: var(--accent);
+      color: var(--bg);
+    }
+    .btn-secondary {
+      color: var(--fg);
+      border: 1px solid var(--line);
+    }
+    .meta-line {
+      margin-top: 14px;
+      font-size: 13px;
+      color: var(--fg-faint);
+    }
+
+    /* Hero image */
+    .shot {
+      max-width: 1080px;
+      margin: 56px auto 0;
+      padding: 0 24px;
+    }
+    .shot img {
+      width: 100%;
+      height: auto;
+      border-radius: var(--radius);
+      box-shadow:
+        0 1px 1px rgba(0,0,0,0.04),
+        0 12px 40px rgba(0,0,0,0.08);
+    }
+    @media (prefers-color-scheme: dark) {
+      .shot img { box-shadow: 0 1px 1px rgba(255,255,255,0.04), 0 12px 40px rgba(0,0,0,0.6); }
+    }
+
+    /* Features */
+    .features {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 96px 24px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+    @media (max-width: 720px) {
+      .features { grid-template-columns: 1fr; gap: 16px; }
+    }
+    .feature {
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 28px;
+    }
+    .feature h3 {
+      margin: 0 0 8px;
+      font-size: 19px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .feature p {
+      margin: 0;
+      color: var(--fg-muted);
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    .feature .ico {
+      width: 28px;
+      height: 28px;
+      color: var(--fg);
+      margin-bottom: 14px;
+    }
+
+    /* Install */
+    .install {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 24px 24px 96px;
+    }
+    .install h2 {
+      font-size: clamp(28px, 3.5vw, 40px);
+      letter-spacing: -0.01em;
+      font-weight: 600;
+      margin: 0 0 32px;
+      text-align: center;
+    }
+    .steps {
+      list-style: none;
+      counter-reset: step;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .steps li {
+      counter-increment: step;
+      padding: 20px 24px 20px 64px;
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      position: relative;
+      font-size: 15px;
+      color: var(--fg-muted);
+    }
+    .steps li::before {
+      content: counter(step);
+      position: absolute;
+      left: 22px; top: 18px;
+      width: 28px; height: 28px;
+      background: var(--accent);
+      color: var(--bg);
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .steps strong { color: var(--fg); font-weight: 600; }
+    .steps code {
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      padding: 1px 6px;
+      border-radius: 5px;
+      font-size: 13px;
+    }
+    .note {
+      margin-top: 24px;
+      padding: 16px 20px;
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--fg-faint);
+      border-radius: 10px;
+      font-size: 13px;
+      color: var(--fg-muted);
+      line-height: 1.55;
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--line);
+      padding: 32px 24px;
+      max-width: 1080px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      color: var(--fg-faint);
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    footer a { color: var(--fg-muted); }
+  </style>
+</head>
+<body>
+
+<nav class="nav">
+  <a class="brand" href="/">
+    <svg viewBox="0 0 256 256" fill="none" aria-hidden="true">
+      <path d="M40 96 V72 a16 16 0 0 1 16 -16 H200 a16 16 0 0 1 16 16 V96"
+            stroke="currentColor" stroke-width="20" stroke-linecap="round"/>
+      <circle cx="128" cy="180" r="22" fill="currentColor"/>
+    </svg>
+    Headroom
+  </a>
+  <div class="nav-links">
+    <a href="#install">Install</a>
+    <a href="https://github.com/nvbinh15/headroom">GitHub</a>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="eyebrow">For Claude Code &amp; Codex CLI</div>
+  <h1>See your <span class="grad">headroom</span>.<br>Live in your menu bar.</h1>
+  <p class="lede">
+    Headroom shows your remaining 5-hour and weekly rate-limit budget for both Claude Code and Codex CLI — no scraping, no extra config. Just <span class="live">54·32%</span> in your menu bar.
+  </p>
+  <div class="cta-row">
+    <a class="btn btn-primary" href="https://github.com/nvbinh15/headroom/releases/latest">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3a1 1 0 0 1 1 1v9.59l3.3-3.3a1 1 0 0 1 1.4 1.42l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 0 1 1.4-1.42L11 13.59V4a1 1 0 0 1 1-1Zm-7 16a1 1 0 1 0 0 2h14a1 1 0 1 0 0-2H5Z"/></svg>
+      Download for macOS
+    </a>
+    <a class="btn btn-secondary" href="https://github.com/nvbinh15/headroom">
+      View on GitHub
+    </a>
+  </div>
+  <div class="meta-line">macOS 14+ · Apple silicon &amp; Intel · Free &amp; open source</div>
+</section>
+
+<div class="shot">
+  <img src="screenshots/hero.png" alt="Headroom in the menu bar, popover, and Settings panel" loading="eager">
+</div>
+
+<section class="features">
+  <div class="feature">
+    <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <rect x="3" y="5" width="18" height="14" rx="2"/>
+      <path d="M3 9h18"/>
+    </svg>
+    <h3>Live in the menu bar</h3>
+    <p>Two compact percentages — 5-hour and weekly — paired with each provider's logo. Tints from green to red as you approach the cap.</p>
+  </div>
+  <div class="feature">
+    <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="9"/>
+      <path d="M12 7v5l3 2"/>
+    </svg>
+    <h3>Reset countdowns</h3>
+    <p>Click the icon for a popover with exact reset times for both windows, plus your detected plan tier.</p>
+  </div>
+  <div class="feature">
+    <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <rect x="3" y="3" width="8" height="8" rx="1.5"/>
+      <rect x="13" y="3" width="8" height="8" rx="1.5"/>
+      <rect x="3" y="13" width="18" height="8" rx="1.5"/>
+    </svg>
+    <h3>Desktop widget</h3>
+    <p>Small and medium WidgetKit sizes. Same data, glanceable on your wallpaper or in Notification Center.</p>
+  </div>
+</section>
+
+<section class="install" id="install">
+  <h2>Install in three steps</h2>
+  <ol class="steps">
+    <li><strong>Download Headroom.dmg</strong> from the <a href="https://github.com/nvbinh15/headroom/releases/latest">latest release</a>.</li>
+    <li><strong>Open the disk image</strong> and drag <strong>Headroom.app</strong> into your <strong>Applications</strong> folder.</li>
+    <li><strong>Right-click the app and choose Open</strong> the first time. macOS will ask for confirmation; click <strong>Open</strong> once and it's trusted from then on.</li>
+  </ol>
+  <p class="note">
+    <strong>Why right-click?</strong> Headroom is currently distributed unsigned. macOS Gatekeeper blocks unknown apps on first launch — right-click → Open is the standard workaround. If macOS still refuses, run <code>xattr -dr com.apple.quarantine /Applications/Headroom.app</code> in Terminal.
+  </p>
+</section>
+
+<footer>
+  <div>© 2026 Headroom · MIT licensed</div>
+  <div>
+    <a href="https://github.com/nvbinh15/headroom">Source</a> ·
+    <a href="https://github.com/nvbinh15/headroom/issues">Issues</a> ·
+    <a href="https://github.com/nvbinh15/headroom/releases">Releases</a>
+  </div>
+</footer>
+
+</body>
+</html>

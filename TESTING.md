@@ -24,7 +24,7 @@ hold ⌘ and drag it left of the clock so it's always visible.
 **If you don't see anything,** the app may have been killed. Re-launch it:
 
 ```sh
-open /Users/binhnguyen/Library/Developer/Xcode/DerivedData/Headroom-*/Build/Products/Debug/Headroom.app
+open ~/Library/Developer/Xcode/DerivedData/Headroom-*/Build/Products/Debug/Headroom.app
 ```
 
 ---
@@ -86,7 +86,7 @@ to index the widget. Try:
 killall Headroom
 
 # Start
-open /Users/binhnguyen/Library/Developer/Xcode/DerivedData/Headroom-*/Build/Products/Debug/Headroom.app
+open ~/Library/Developer/Xcode/DerivedData/Headroom-*/Build/Products/Debug/Headroom.app
 ```
 
 The app does **not** auto-start at login yet. To make it permanent, see
@@ -99,7 +99,7 @@ The app does **not** auto-start at login yet. To make it permanent, see
 If anything feels off, the CLI prints the exact same data the app uses:
 
 ```sh
-cd /Users/binhnguyen/Desktop/token-status/HeadroomKit
+cd HeadroomKit
 swift run headroom
 ```
 
@@ -133,7 +133,7 @@ entirely from the CLI.
 ### Open the project
 
 ```sh
-open /Users/binhnguyen/Desktop/token-status/Headroom.xcodeproj
+open Headroom.xcodeproj
 ```
 
 ### The bits to know
@@ -161,7 +161,7 @@ If you add a new Swift file or change `project.yml`, regenerate the Xcode
 project:
 
 ```sh
-cd /Users/binhnguyen/Desktop/token-status
+cd <repo>
 xcodegen generate
 ```
 
@@ -171,7 +171,7 @@ Xcode caches the old structure and may show stale errors).
 ### Building from the command line (no Xcode UI)
 
 ```sh
-cd /Users/binhnguyen/Desktop/token-status
+cd <repo>
 xcodebuild -project Headroom.xcodeproj \
            -scheme HeadroomApp \
            -configuration Debug \
@@ -182,7 +182,7 @@ The built bundle goes to a long DerivedData path; the easy way to launch it:
 
 ```sh
 killall Headroom 2>/dev/null
-open /Users/binhnguyen/Library/Developer/Xcode/DerivedData/Headroom-*/Build/Products/Debug/Headroom.app
+open ~/Library/Developer/Xcode/DerivedData/Headroom-*/Build/Products/Debug/Headroom.app
 ```
 
 ---

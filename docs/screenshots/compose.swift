@@ -98,3 +98,32 @@ guard CGImageDestinationFinalize(dest) else {
     fputs("Failed to finalize PNG\n", stderr); exit(1)
 }
 print("wrote \(outURL.path) (\(Int(canvasW))×\(Int(canvasH)))")
+
+// Compress with pngquant + oxipng if installed. Both are no-ops when
+// missing; the unoptimized PNG is still valid.
+func run(_ launchPath: String, _ args: [String]) -> Bool {
+    guard FileManager.default.isExecutableFile(atPath: launchPath) else { return false }
+    let p = Process()
+    p.launchPath = launchPath
+    p.arguments = args
+    p.standardOutput = Pipe()
+    p.standardError = Pipe()
+    do { try p.run(); p.waitUntilExit() } catch { return false }
+    return p.terminationStatus == 0
+}
+
+let path = outURL.path
+let pngquantPaths = ["/opt/homebrew/bin/pngquant", "/usr/local/bin/pngquant"]
+let oxipngPaths = ["/opt/homebrew/bin/oxipng", "/usr/local/bin/oxipng"]
+
+for bin in pngquantPaths where run(bin, ["--quality", "80-95", "--speed", "1", "--force", "--output", path, path]) {
+    print("optimized via pngquant"); break
+}
+for bin in oxipngPaths where run(bin, ["-o", "6", "--strip", "safe", path]) {
+    print("optimized via oxipng"); break
+}
+
+if let bytes = try? FileManager.default.attributesOfItem(atPath: path)[.size] as? Int {
+    let kb = Double(bytes) / 1024
+    print(String(format: "final: %.0f KB", kb))
+}

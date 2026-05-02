@@ -88,10 +88,7 @@ private struct MediumWidgetView: View {
         }
         private var resetText: String {
             guard let date = window?.resetsAt else { return " " }
-            let secs = max(0, Int(date.timeIntervalSinceNow))
-            let h = secs / 3600
-            let m = (secs % 3600) / 60
-            return h > 0 ? "in \(h)h\(String(format: "%02d", m))m" : "in \(m)m"
+            return "in \(date.headroomCountdown())"
         }
     }
 }

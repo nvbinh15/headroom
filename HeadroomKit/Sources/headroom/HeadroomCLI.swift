@@ -34,11 +34,7 @@ struct HeadroomCLI {
     }
 
     static func formatReset(_ date: Date?) -> String {
-        guard let date else { return "—" }
-        let secs = max(0, Int(date.timeIntervalSinceNow))
-        let h = secs / 3600
-        let m = (secs % 3600) / 60
-        return String(format: "%dh%02dm", h, m)
+        date?.headroomCountdown() ?? "—"
     }
 
     static func renderProvider(_ name: String, _ usage: ProviderUsage) {

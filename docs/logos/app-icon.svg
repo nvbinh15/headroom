@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" aria-label="Headroom app icon">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a2a2c"/>
+      <stop offset="1" stop-color="#0a0a0c"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="228" ry="228" fill="url(#bg)"/>
+  <g transform="translate(0,40) scale(4)" fill="none">
+    <path d="M40 96 V72 a16 16 0 0 1 16 -16 H200 a16 16 0 0 1 16 16 V96"
+          stroke="#ffffff" stroke-width="20" stroke-linecap="round"/>
+    <circle cx="128" cy="180" r="22" fill="#ffffff"/>
+  </g>
+</svg>

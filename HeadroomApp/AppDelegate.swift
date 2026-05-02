@@ -47,13 +47,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let str = NSMutableAttributedString()
 
         str.append(coloredSegment(
-            label: "C",
+            assetName: "ClaudeLogo",
             fraction: claudePct,
             weeklyFraction: state.claude.weekly?.fraction
         ))
         str.append(NSAttributedString(string: "  "))
         str.append(coloredSegment(
-            label: "X",
+            assetName: "OpenAILogo",
             fraction: codexPct,
             weeklyFraction: state.codex.weekly?.fraction
         ))
@@ -61,25 +61,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem?.button?.attributedTitle = str
     }
 
-    private func coloredSegment(label: String, fraction: Double?, weeklyFraction: Double?) -> NSAttributedString {
-        let pctText: String
-        if let f = fraction { pctText = "\(Int((f * 100).rounded()))%" }
-        else { pctText = "—" }
-        let weeklyText: String
-        if let w = weeklyFraction { weeklyText = "·\(Int((w * 100).rounded()))%" }
-        else { weeklyText = "" }
+    private func coloredSegment(
+        assetName: String,
+        fraction: Double?,
+        weeklyFraction: Double?
+    ) -> NSAttributedString {
+        let pctText: String = fraction.map { "\(Int(($0 * 100).rounded()))%" } ?? "—"
+        let weeklyText: String = weeklyFraction.map { "·\(Int(($0 * 100).rounded()))%" } ?? ""
 
-        let color: NSColor = {
+        let textColor: NSColor = {
             guard let f = fraction else { return .secondaryLabelColor }
             if f >= 0.9 { return .systemRed }
             if f >= 0.7 { return .systemOrange }
             return .labelColor
         }()
-        let attrs: [NSAttributedString.Key: Any] = [
+        // Logos stay white by default and only flip to the warning colors.
+        let iconColor: NSColor = {
+            guard let f = fraction else { return .secondaryLabelColor }
+            if f >= 0.9 { return .systemRed }
+            if f >= 0.7 { return .systemOrange }
+            return .white
+        }()
+
+        let result = NSMutableAttributedString()
+
+        if let image = NSImage(named: assetName) {
+            let size = NSSize(width: 14, height: 14)
+            let tinted = image.tinted(with: iconColor, size: size)
+            let attachment = NSTextAttachment()
+            attachment.image = tinted
+            // Lift so the glyph baselines with the percentage text.
+            attachment.bounds = CGRect(x: 0, y: -2, width: size.width, height: size.height)
+            result.append(NSAttributedString(attachment: attachment))
+            result.append(NSAttributedString(string: " "))
+        }
+
+        let textAttrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.menuBarFont(ofSize: 0),
-            .foregroundColor: color
+            .foregroundColor: textColor
         ]
-        return NSAttributedString(string: "\(label) \(pctText)\(weeklyText)", attributes: attrs)
+        result.append(NSAttributedString(string: "\(pctText)\(weeklyText)", attributes: textAttrs))
+        return result
     }
 
     func openSettings() {

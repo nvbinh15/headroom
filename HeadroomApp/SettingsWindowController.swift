@@ -13,12 +13,16 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         self.refreshController = refreshController
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 260),
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 440),
             styleMask: [.titled, .closable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
         window.title = "Headroom — Settings"
+        window.titlebarAppearsTransparent = true
+        window.isMovableByWindowBackground = true
+        window.backgroundColor = .clear
+        window.isOpaque = false
         window.isReleasedWhenClosed = false
         window.center()
         window.setFrameAutosaveName("HeadroomSettingsWindow")
@@ -26,10 +30,27 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         super.init(window: window)
         window.delegate = self
 
-        let host = NSHostingController(
+        // Frosted-glass underlay for the whole window. Matches the widget's
+        // material aesthetic and lets desktop content blur through.
+        let glass = NSVisualEffectView()
+        glass.material = .hudWindow
+        glass.blendingMode = .behindWindow
+        glass.state = .active
+        glass.translatesAutoresizingMaskIntoConstraints = false
+
+        let host = NSHostingView(
             rootView: SettingsView().environmentObject(refreshController)
         )
-        window.contentViewController = host
+        host.translatesAutoresizingMaskIntoConstraints = false
+        glass.addSubview(host)
+        NSLayoutConstraint.activate([
+            host.leadingAnchor.constraint(equalTo: glass.leadingAnchor),
+            host.trailingAnchor.constraint(equalTo: glass.trailingAnchor),
+            host.topAnchor.constraint(equalTo: glass.topAnchor),
+            host.bottomAnchor.constraint(equalTo: glass.bottomAnchor)
+        ])
+
+        window.contentView = glass
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) not used") }

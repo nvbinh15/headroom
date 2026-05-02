@@ -74,6 +74,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)  // let the window's glass show through
         .frame(width: 480, height: 440)
     }
 

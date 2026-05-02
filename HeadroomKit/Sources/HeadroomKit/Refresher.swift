@@ -72,6 +72,14 @@ public actor Refresher {
                 return localClaudeEstimate(plan: plan, note: "estimate — API \(describeClaude(err))")
             }
         }
+        // No keychain creds. If the user has never run Claude Code locally either,
+        // treat the provider as unconfigured so the UI hides it.
+        let claudeProjects = FileManager.default
+            .homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude/projects", isDirectory: true)
+        if !FileManager.default.fileExists(atPath: claudeProjects.path) {
+            return ProviderUsage(note: "Claude not signed in", isConfigured: false)
+        }
         return localClaudeEstimate(plan: plan, note: "estimate — no keychain auth")
     }
 
@@ -124,6 +132,14 @@ public actor Refresher {
                 fallback.note = (fallback.note ?? "") + " · API \(describeCodex(err))"
                 return fallback
             }
+        }
+        // No auth.json. If the user has never run Codex locally either,
+        // treat the provider as unconfigured so the UI hides it.
+        let codexSessions = FileManager.default
+            .homeDirectoryForCurrentUser
+            .appendingPathComponent(".codex/sessions", isDirectory: true)
+        if !FileManager.default.fileExists(atPath: codexSessions.path) {
+            return ProviderUsage(note: "Codex not signed in", isConfigured: false)
         }
         var fallback = CodexUsageReader().read()
         fallback.note = (fallback.note ?? "codex") + " · no auth"

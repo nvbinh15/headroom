@@ -42,22 +42,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     private func updateStatusItemTitle() {
         let state = refreshController.state
-        let claudePct = state.claude.fiveHour?.fraction
-        let codexPct = state.codex.fiveHour?.fraction
         let str = NSMutableAttributedString()
 
-        str.append(coloredSegment(
-            assetName: "ClaudeLogo",
-            fraction: claudePct,
-            weeklyFraction: state.claude.weekly?.fraction
-        ))
-        str.append(NSAttributedString(string: "  "))
-        str.append(coloredSegment(
-            assetName: "OpenAILogo",
-            fraction: codexPct,
-            weeklyFraction: state.codex.weekly?.fraction
-        ))
+        var segments: [NSAttributedString] = []
+        if state.claude.isConfigured {
+            segments.append(coloredSegment(
+                assetName: "ClaudeLogo",
+                fraction: state.claude.fiveHour?.fraction,
+                weeklyFraction: state.claude.weekly?.fraction
+            ))
+        }
+        if state.codex.isConfigured {
+            segments.append(coloredSegment(
+                assetName: "OpenAILogo",
+                fraction: state.codex.fiveHour?.fraction,
+                weeklyFraction: state.codex.weekly?.fraction
+            ))
+        }
 
+        if segments.isEmpty {
+            statusItem?.button?.attributedTitle = NSAttributedString()
+            statusItem?.button?.title = "Headroom"
+            return
+        }
+
+        for (i, seg) in segments.enumerated() {
+            if i > 0 { str.append(NSAttributedString(string: "  ")) }
+            str.append(seg)
+        }
         statusItem?.button?.attributedTitle = str
     }
 

@@ -23,9 +23,19 @@ struct HeadroomCLI {
             return
         }
 
-        renderProvider("Claude", state.claude)
-        print("")
-        renderProvider("Codex", state.codex)
+        var rendered = false
+        if state.claude.isConfigured {
+            renderProvider("Claude", state.claude)
+            rendered = true
+        }
+        if state.codex.isConfigured {
+            if rendered { print("") }
+            renderProvider("Codex", state.codex)
+            rendered = true
+        }
+        if !rendered {
+            print("No providers signed in. Sign in to Claude Code or Codex CLI to see usage here.")
+        }
     }
 
     static func formatPct(_ frac: Double?) -> String {

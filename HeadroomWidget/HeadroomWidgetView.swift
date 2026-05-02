@@ -18,15 +18,40 @@ private struct SmallWidgetView: View {
     let state: UsageState
 
     var body: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 12) {
-                RingView(label: "C", fraction: state.claude.fiveHour?.fraction)
-                RingView(label: "X", fraction: state.codex.fiveHour?.fraction)
+        if !state.claude.isConfigured && !state.codex.isConfigured {
+            EmptyState()
+        } else {
+            VStack(spacing: 10) {
+                HStack(spacing: 12) {
+                    if state.claude.isConfigured {
+                        RingView(label: "C", fraction: state.claude.fiveHour?.fraction)
+                    }
+                    if state.codex.isConfigured {
+                        RingView(label: "X", fraction: state.codex.fiveHour?.fraction)
+                    }
+                }
+                HStack(spacing: 8) {
+                    if state.claude.isConfigured {
+                        MiniBar(label: "C·wk", fraction: state.claude.weekly?.fraction)
+                    }
+                    if state.codex.isConfigured {
+                        MiniBar(label: "X·wk", fraction: state.codex.weekly?.fraction)
+                    }
+                }
             }
-            HStack(spacing: 8) {
-                MiniBar(label: "C·wk", fraction: state.claude.weekly?.fraction)
-                MiniBar(label: "X·wk", fraction: state.codex.weekly?.fraction)
-            }
+            .padding(8)
+        }
+    }
+}
+
+private struct EmptyState: View {
+    var body: some View {
+        VStack(spacing: 4) {
+            Text("Headroom").font(.caption.bold())
+            Text("Sign in to Claude Code or Codex CLI")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
         }
         .padding(8)
     }
@@ -36,12 +61,22 @@ private struct MediumWidgetView: View {
     let state: UsageState
 
     var body: some View {
-        VStack(spacing: 8) {
-            ProviderRow(name: "Claude", usage: state.claude)
-            Divider()
-            ProviderRow(name: "Codex",  usage: state.codex)
+        if !state.claude.isConfigured && !state.codex.isConfigured {
+            EmptyState()
+        } else {
+            VStack(spacing: 8) {
+                if state.claude.isConfigured {
+                    ProviderRow(name: "Claude", usage: state.claude)
+                }
+                if state.claude.isConfigured && state.codex.isConfigured {
+                    Divider()
+                }
+                if state.codex.isConfigured {
+                    ProviderRow(name: "Codex",  usage: state.codex)
+                }
+            }
+            .padding(12)
         }
-        .padding(12)
     }
 
     struct ProviderRow: View {

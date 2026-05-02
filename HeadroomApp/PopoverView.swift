@@ -22,8 +22,15 @@ struct PopoverView: View {
                 .help("Refresh now")
             }
 
-            ProviderRow(name: "Claude", usage: controller.state.claude)
-            ProviderRow(name: "Codex",  usage: controller.state.codex)
+            if controller.state.claude.isConfigured {
+                ProviderRow(name: "Claude", usage: controller.state.claude)
+            }
+            if controller.state.codex.isConfigured {
+                ProviderRow(name: "Codex",  usage: controller.state.codex)
+            }
+            if !controller.state.claude.isConfigured && !controller.state.codex.isConfigured {
+                EmptyStateView()
+            }
 
             HStack {
                 Text("Updated \(relativeTimestamp)")
@@ -49,6 +56,23 @@ struct PopoverView: View {
         let f = RelativeDateTimeFormatter()
         f.unitsStyle = .short
         return f.localizedString(for: controller.state.lastUpdated, relativeTo: Date())
+    }
+}
+
+struct EmptyStateView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("No providers signed in")
+                .font(.subheadline.bold())
+            Text("Sign in to Claude Code or Codex CLI to see usage here.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(8)
+        .background(.quaternary.opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 

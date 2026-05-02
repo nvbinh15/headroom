@@ -33,11 +33,29 @@ public struct ProviderUsage: Codable, Sendable, Equatable {
     public var weekly: WindowUsage?
     /// Free-form note: plan tier, "from API", "estimate", "no recent sessions", etc.
     public var note: String?
+    /// False when the provider has no auth and no local data on disk. UI surfaces
+    /// hide unconfigured providers entirely instead of rendering empty rows.
+    public var isConfigured: Bool
 
-    public init(fiveHour: WindowUsage? = nil, weekly: WindowUsage? = nil, note: String? = nil) {
+    public init(
+        fiveHour: WindowUsage? = nil,
+        weekly: WindowUsage? = nil,
+        note: String? = nil,
+        isConfigured: Bool = true
+    ) {
         self.fiveHour = fiveHour
         self.weekly = weekly
         self.note = note
+        self.isConfigured = isConfigured
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.fiveHour = try c.decodeIfPresent(WindowUsage.self, forKey: .fiveHour)
+        self.weekly = try c.decodeIfPresent(WindowUsage.self, forKey: .weekly)
+        self.note = try c.decodeIfPresent(String.self, forKey: .note)
+        // Default to true for state.json files written by older builds.
+        self.isConfigured = try c.decodeIfPresent(Bool.self, forKey: .isConfigured) ?? true
     }
 }
 

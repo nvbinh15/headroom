@@ -29,10 +29,10 @@ let settings = loadCG("settings.png")
 
 func aspect(_ img: CGImage) -> CGFloat { CGFloat(img.width) / CGFloat(img.height) }
 
-let pad: CGFloat = 32
-let gap: CGFloat = 32
-let rowGap: CGFloat = 32
-let bottomHeight: CGFloat = 700
+let pad: CGFloat = 20
+let gap: CGFloat = 20
+let rowGap: CGFloat = 20
+let bottomHeight: CGFloat = 420
 
 let popoverW  = (bottomHeight * aspect(popover)).rounded()
 let settingsW = (bottomHeight * aspect(settings)).rounded()

@@ -9,13 +9,7 @@ The menu-bar readout pairs each provider's logo with `5h·weekly` percentages.
 Click it for the popover; open Settings from there.
 
 <p align="center">
-  <img src="docs/screenshots/menu-bar.png" alt="Menu bar" width="620">
-</p>
-
-<p align="center">
-  <img src="docs/screenshots/popover.png" alt="Popover" width="380">
-  &nbsp;
-  <img src="docs/screenshots/settings.png" alt="Settings" width="380">
+  <img src="docs/screenshots/hero.png" alt="Headroom — menu bar, popover, and settings" width="820">
 </p>
 
 A WidgetKit extension is bundled too — small and medium desktop widgets that

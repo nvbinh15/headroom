@@ -3,16 +3,24 @@
 Shows your remaining 5-hour and weekly rate-limit budget for both Claude Code
 and Codex CLI directly in the macOS menu bar, with a matching desktop widget.
 
-## What it shows
+## Screenshots
 
-```
-C 54%·32%   X 4%·19%
-└─Claude    └─Codex
-   5h·week     5h·week
-```
+The menu-bar readout pairs each provider's logo with `5h·weekly` percentages.
+Click it for the popover; open Settings from there.
 
-Click the menu-bar item to see a popover with progress bars, exact percentages,
-and the time until each window resets.
+<p align="center">
+  <img src="docs/screenshots/menu-bar.png" alt="Menu bar" width="620">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/popover.png" alt="Popover" width="380">
+  &nbsp;
+  <img src="docs/screenshots/settings.png" alt="Settings" width="380">
+</p>
+
+A WidgetKit extension is bundled too — small and medium desktop widgets that
+show the same data — but it's only visible after macOS finishes indexing a
+signed build of the app (see TESTING.md).
 
 ## Data sources (no scraping, no extra config)
 

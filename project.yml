@@ -1,0 +1,59 @@
+name: Headroom
+options:
+  bundleIdPrefix: com.binhnguyen
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+
+packages:
+  HeadroomKit:
+    path: HeadroomKit
+
+settings:
+  base:
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "5.9"
+    GENERATE_INFOPLIST_FILE: NO
+    ENABLE_HARDENED_RUNTIME: YES
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+
+targets:
+  HeadroomApp:
+    type: application
+    platform: macOS
+    sources:
+      - HeadroomApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.binhnguyen.headroom
+        PRODUCT_NAME: Headroom
+        INFOPLIST_FILE: HeadroomApp/Info.plist
+        CODE_SIGN_ENTITLEMENTS: HeadroomApp/HeadroomApp.entitlements
+        CODE_SIGN_IDENTITY: "-"
+        SWIFT_VERSION: "5.9"
+        GENERATE_INFOPLIST_FILE: NO
+    dependencies:
+      - package: HeadroomKit
+        product: HeadroomKit
+      - target: HeadroomWidget
+        embed: true
+
+  HeadroomWidget:
+    type: app-extension
+    platform: macOS
+    sources:
+      - HeadroomWidget
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.binhnguyen.headroom.widget
+        PRODUCT_NAME: HeadroomWidget
+        INFOPLIST_FILE: HeadroomWidget/Info.plist
+        CODE_SIGN_ENTITLEMENTS: HeadroomWidget/HeadroomWidget.entitlements
+        CODE_SIGN_IDENTITY: "-"
+        SWIFT_VERSION: "5.9"
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+    dependencies:
+      - package: HeadroomKit
+        product: HeadroomKit

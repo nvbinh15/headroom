@@ -13,6 +13,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsWindowController: SettingsWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Bail out if another Headroom (same bundle ID) is already running —
+        // otherwise both instances install a status item and a popover, which
+        // shows up as a duplicated menu-bar widget on wide displays.
+        if isAnotherInstanceRunning() {
+            NSApp.terminate(nil)
+            return
+        }
+
         AppDelegate.shared = self
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
@@ -123,6 +131,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Close the popover so the window doesn't open behind it.
         popover.performClose(nil)
         settingsWindowController?.show()
+    }
+
+    private func isAnotherInstanceRunning() -> Bool {
+        guard let myID = Bundle.main.bundleIdentifier else { return false }
+        let myPID = ProcessInfo.processInfo.processIdentifier
+        return NSWorkspace.shared.runningApplications.contains { app in
+            app.bundleIdentifier == myID && app.processIdentifier != myPID
+        }
     }
 
     @objc private func togglePopover(_ sender: Any?) {

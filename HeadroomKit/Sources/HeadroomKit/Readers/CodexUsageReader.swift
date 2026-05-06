@@ -116,13 +116,14 @@ public struct CodexUsageReader: Sendable {
         var fraction = pct / 100.0
 
         // Snapshots are emitted on each Codex API call. If no Codex activity
-        // has happened since the window's resets_at, the cached snapshot is
-        // stale and the window has actually rolled over to 0% used. Project
-        // the next reset forward by the window length.
-        if let reset = resetsAt, reset < Date(), windowMinutes > 0 {
+        // has happened since the window's resets_at, the bucket has rolled to
+        // 0% — but Codex's 5h window is *rolling* (anchored to the next
+        // request), not a fixed cadence. We don't know when the new window
+        // will start, so don't fabricate one. Drop resetsAt; the caller
+        // displays no countdown rather than a phantom value.
+        if let reset = resetsAt, reset < Date() {
             fraction = 0
-            let elapsedWindows = floor(Date().timeIntervalSince(reset) / Double(windowMinutes * 60)) + 1
-            resetsAt = reset.addingTimeInterval(elapsedWindows * Double(windowMinutes * 60))
+            resetsAt = nil
         }
 
         return WindowUsage(

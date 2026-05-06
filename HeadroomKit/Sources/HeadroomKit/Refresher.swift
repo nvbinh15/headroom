@@ -116,16 +116,17 @@ public actor Refresher {
         if let auth = CodexAuth.loadDefault() {
             if let cached: CachedCodexResponse = readCache(at: configuration.codexCacheURL),
                Date().timeIntervalSince(cached.fetchedAt) < configuration.minOAuthInterval {
-                return codexProviderUsage(from: cached.response, source: "API · cached")
+                return codexProviderUsage(from: cached.response, fetchedAt: cached.fetchedAt, source: "API · cached")
             }
             switch await codexClient.fetch(auth: auth) {
             case .success(let response):
-                writeCache(CachedCodexResponse(fetchedAt: Date(), response: response), at: configuration.codexCacheURL)
-                return codexProviderUsage(from: response, source: "API")
+                let now = Date()
+                writeCache(CachedCodexResponse(fetchedAt: now, response: response), at: configuration.codexCacheURL)
+                return codexProviderUsage(from: response, fetchedAt: now, source: "API")
             case .failure(let err):
                 if let cached: CachedCodexResponse = readCache(at: configuration.codexCacheURL) {
                     let age = Int(Date().timeIntervalSince(cached.fetchedAt) / 60)
-                    return codexProviderUsage(from: cached.response, source: "API · stale \(age)m (\(describeCodex(err)))")
+                    return codexProviderUsage(from: cached.response, fetchedAt: cached.fetchedAt, source: "API · stale \(age)m (\(describeCodex(err)))")
                 }
                 // Last resort — JSONL snapshot from the most recent session.
                 var fallback = CodexUsageReader().read()
@@ -155,17 +156,29 @@ public actor Refresher {
         }
     }
 
-    private func codexProviderUsage(from r: CodexUsageClient.Response, source: String) -> ProviderUsage {
-        let fiveHour = r.rate_limit?.primary_window.flatMap { window(from: $0) }
-        let weekly = r.rate_limit?.secondary_window.flatMap { window(from: $0) }
+    private func codexProviderUsage(from r: CodexUsageClient.Response, fetchedAt: Date, source: String) -> ProviderUsage {
+        let fiveHour = r.rate_limit?.primary_window.flatMap { window(from: $0, fetchedAt: fetchedAt) }
+        let weekly = r.rate_limit?.secondary_window.flatMap { window(from: $0, fetchedAt: fetchedAt) }
         let plan = r.plan_type.map { "Codex \($0)" } ?? "Codex"
         return ProviderUsage(fiveHour: fiveHour, weekly: weekly, note: "\(plan) · \(source)")
     }
 
-    private func window(from w: CodexUsageClient.Window) -> WindowUsage? {
+    private func window(from w: CodexUsageClient.Window, fetchedAt: Date) -> WindowUsage? {
         guard let pct = w.used_percent else { return nil }
         let secs = w.limit_window_seconds ?? 0
-        let resetsAt = w.reset_at.map { Date(timeIntervalSince1970: $0) }
+        // Prefer reset_after_seconds anchored to our fetch time. The server's
+        // absolute reset_at is computed against the server clock, so any drift
+        // between server and client (or, more importantly, between cache write
+        // and cache read) shows up as a wrong countdown. Anchoring to fetchedAt
+        // keeps the countdown accurate regardless.
+        let resetsAt: Date?
+        if let after = w.reset_after_seconds {
+            resetsAt = fetchedAt.addingTimeInterval(TimeInterval(after))
+        } else if let at = w.reset_at {
+            resetsAt = Date(timeIntervalSince1970: at)
+        } else {
+            resetsAt = nil
+        }
         return WindowUsage(
             fraction: pct / 100.0,
             resetsAt: resetsAt,

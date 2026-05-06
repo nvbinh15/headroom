@@ -20,6 +20,7 @@ public struct CodexUsageClient: Sendable {
     public struct Window: Codable, Sendable {
         public let used_percent: Double?
         public let limit_window_seconds: Int?
+        public let reset_after_seconds: Int?
         public let reset_at: Double?
     }
 

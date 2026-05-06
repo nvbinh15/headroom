@@ -1,6 +1,34 @@
 import SwiftUI
 import HeadroomKit
 
+private struct HoverTextButtonStyle: ButtonStyle {
+    var defaultColor: Color = .secondary
+    var hoverColor: Color = .primary
+
+    func makeBody(configuration: Configuration) -> some View {
+        HoverTextLabel(
+            configuration: configuration,
+            defaultColor: defaultColor,
+            hoverColor: hoverColor
+        )
+    }
+
+    private struct HoverTextLabel: View {
+        let configuration: ButtonStyle.Configuration
+        let defaultColor: Color
+        let hoverColor: Color
+        @State private var hovering = false
+
+        var body: some View {
+            configuration.label
+                .foregroundStyle(hovering ? hoverColor : defaultColor)
+                .opacity(configuration.isPressed ? 0.6 : 1)
+                .contentShape(Rectangle())
+                .onHover { hovering = $0 }
+        }
+    }
+}
+
 struct PopoverView: View {
     @EnvironmentObject var controller: RefreshController
 
@@ -39,13 +67,13 @@ struct PopoverView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button("Settings…") {
+                Button("Settings") {
                     AppDelegate.shared?.openSettings()
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(HoverTextButtonStyle())
                 .font(.caption)
                 Button("Quit") { NSApp.terminate(nil) }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(HoverTextButtonStyle())
                     .font(.caption)
             }
         }

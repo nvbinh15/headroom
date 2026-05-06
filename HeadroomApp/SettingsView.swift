@@ -1,6 +1,35 @@
 import SwiftUI
 import HeadroomKit
 
+private struct HoverBackgroundButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HoverBackgroundLabel(configuration: configuration)
+    }
+
+    private struct HoverBackgroundLabel: View {
+        let configuration: ButtonStyle.Configuration
+        @State private var hovering = false
+
+        var body: some View {
+            configuration.label
+                .padding(.horizontal, 12)
+                .padding(.vertical, 5)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(background)
+                )
+                .contentShape(Rectangle())
+                .onHover { hovering = $0 }
+        }
+
+        private var background: Color {
+            if configuration.isPressed { return Color.primary.opacity(0.18) }
+            if hovering { return Color.primary.opacity(0.12) }
+            return Color.primary.opacity(0.06)
+        }
+    }
+}
+
 struct SettingsView: View {
     @EnvironmentObject var controller: RefreshController
     @State private var launchAtLogin: Bool = LaunchAtLogin.isEnabled
@@ -43,9 +72,11 @@ struct SettingsView: View {
                     Button("Reset caches") {
                         Task { await controller.resetCachesAndRefresh() }
                     }
+                    .buttonStyle(HoverBackgroundButtonStyle())
                     Button("Open data folder") {
                         controller.openDataFolder()
                     }
+                    .buttonStyle(HoverBackgroundButtonStyle())
                     Spacer()
                 }
             } header: {

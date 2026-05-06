@@ -1,5 +1,31 @@
 import SwiftUI
+import AppKit
 import HeadroomKit
+
+private struct DataFlowGroup: View {
+    let title: String
+    let items: [String]
+    var footnote: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.callout.weight(.semibold))
+            ForEach(items, id: \.self) { item in
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("•").foregroundStyle(.secondary)
+                    Text(item).foregroundStyle(.secondary)
+                }
+            }
+            if let footnote {
+                Text(footnote)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 2)
+            }
+        }
+    }
+}
 
 private struct HoverBackgroundButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
@@ -102,6 +128,51 @@ struct SettingsView: View {
                 }
             } header: {
                 Text("Status")
+            }
+
+            Section {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Headroom is not affiliated with Anthropic or OpenAI. It reads the local credentials those tools already store on this machine, then queries each service's usage endpoint to show your remaining budget.")
+
+                    DataFlowGroup(
+                        title: "Reads from disk",
+                        items: [
+                            "~/.codex/auth.json — Codex OAuth bearer + account ID",
+                            "~/.codex/sessions/**/*.jsonl — used as a fallback when the API is unreachable",
+                            "~/.claude/projects/**/*.jsonl — used as a fallback when the API is unreachable"
+                        ]
+                    )
+                    DataFlowGroup(
+                        title: "Reads from macOS keychain",
+                        items: [
+                            "“Claude Code-credentials” — Claude OAuth bearer written by Claude Code"
+                        ]
+                    )
+                    DataFlowGroup(
+                        title: "Sends over the network",
+                        items: [
+                            "GET api.anthropic.com/api/oauth/usage",
+                            "GET chatgpt.com/backend-api/wham/usage"
+                        ],
+                        footnote: "Authorized with the bearer tokens above. No telemetry, analytics, or other data leaves your machine."
+                    )
+
+                    Text("Anthropic's terms (updated February 2026) restrict third-party use of Claude subscription OAuth tokens to Anthropic's own products. Headroom uses them at your discretion; signing or notarization does not change those underlying terms.")
+                        .foregroundStyle(.secondary)
+                }
+                .font(.callout)
+
+                HStack {
+                    Button("Privacy policy") {
+                        if let url = URL(string: "https://nvbinh15.github.io/headroom/privacy.html") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                    .buttonStyle(HoverBackgroundButtonStyle())
+                    Spacer()
+                }
+            } header: {
+                Text("Privacy & Data")
             }
         }
         .formStyle(.grouped)

@@ -33,9 +33,11 @@ struct PopoverView: View {
             }
 
             HStack {
-                Text("Updated \(relativeTimestamp)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                TimelineView(.periodic(from: .now, by: 30)) { context in
+                    Text("Updated \(relativeTimestamp(now: context.date))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
                 Button("Settings…") {
                     AppDelegate.shared?.openSettings()
@@ -51,11 +53,11 @@ struct PopoverView: View {
         .frame(width: 320)
     }
 
-    private var relativeTimestamp: String {
+    private func relativeTimestamp(now: Date) -> String {
         guard controller.state.lastUpdated != .distantPast else { return "never" }
         let f = RelativeDateTimeFormatter()
         f.unitsStyle = .short
-        return f.localizedString(for: controller.state.lastUpdated, relativeTo: Date())
+        return f.localizedString(for: controller.state.lastUpdated, relativeTo: now)
     }
 }
 
@@ -113,10 +115,15 @@ struct WindowBar: View {
             Text(percentText)
                 .font(.caption.monospacedDigit())
                 .frame(width: 44, alignment: .trailing)
-            Text(resetText)
-                .font(.caption2.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .frame(width: 60, alignment: .trailing)
+            // TimelineView re-renders the countdown every 30s so it stays
+            // correct between data refreshes (and survives App Nap pausing
+            // the refresh timer).
+            TimelineView(.periodic(from: .now, by: 30)) { context in
+                Text(resetText(now: context.date))
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            .frame(width: 60, alignment: .trailing)
         }
     }
 
@@ -132,7 +139,7 @@ struct WindowBar: View {
         return String(format: "%.0f%%", f * 100)
     }
 
-    private var resetText: String {
-        window?.resetsAt?.headroomCountdown() ?? ""
+    private func resetText(now: Date) -> String {
+        window?.resetsAt?.headroomCountdown(from: now) ?? ""
     }
 }

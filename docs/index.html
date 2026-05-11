@@ -412,13 +412,19 @@
   }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
   document.querySelectorAll('.reveal').forEach((el) => observer.observe(el));
 
+  // GitHub release downloads redirect to a CDN that serves Content-Disposition:
+  // attachment. The `download` attribute is ignored across origins, so use a
+  // hidden iframe to trigger the download without navigating the page.
   function downloadDMG() {
-    const link = document.createElement('a');
-    link.href = 'https://github.com/nvbinh15/headroom/releases/download/v0.1.1/Headroom.dmg';
-    link.download = 'Headroom.dmg';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const url = 'https://github.com/nvbinh15/headroom/releases/download/v0.1.1/Headroom.dmg';
+    let iframe = document.getElementById('dl-frame');
+    if (!iframe) {
+      iframe = document.createElement('iframe');
+      iframe.id = 'dl-frame';
+      iframe.style.display = 'none';
+      document.body.appendChild(iframe);
+    }
+    iframe.src = url;
   }
 </script>
 

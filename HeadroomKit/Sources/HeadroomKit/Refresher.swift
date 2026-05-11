@@ -157,8 +157,19 @@ public actor Refresher {
     }
 
     private func codexProviderUsage(from r: CodexUsageClient.Response, fetchedAt: Date, source: String) -> ProviderUsage {
-        let fiveHour = r.rate_limit?.primary_window.flatMap { window(from: $0, fetchedAt: fetchedAt) }
-        let weekly = r.rate_limit?.secondary_window.flatMap { window(from: $0, fetchedAt: fetchedAt) }
+        // /wham/usage surfaces the *currently-enforced* bucket as `primary_window`
+        // — when the weekly cap is hit, the weekly bucket arrives in the primary
+        // slot. Classify by window length, not by position.
+        var fiveHour: WindowUsage?
+        var weekly: WindowUsage?
+        for raw in [r.rate_limit?.primary_window, r.rate_limit?.secondary_window] {
+            guard let raw, let parsed = window(from: raw, fetchedAt: fetchedAt) else { continue }
+            if (raw.limit_window_seconds ?? 0) >= 21_600 {
+                weekly = parsed
+            } else {
+                fiveHour = parsed
+            }
+        }
         let plan = r.plan_type.map { "Codex \($0)" } ?? "Codex"
         return ProviderUsage(fiveHour: fiveHour, weekly: weekly, note: "\(plan) · \(source)")
     }

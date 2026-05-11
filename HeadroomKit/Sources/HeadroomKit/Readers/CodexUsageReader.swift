@@ -24,9 +24,20 @@ public struct CodexUsageReader: Sendable {
         // Walk files newest → oldest, return the first rate_limits we find.
         for file in files {
             if let snapshot = latestRateLimits(in: file) {
+                // Codex puts the currently-enforced bucket in the `primary` slot,
+                // so classify by window length rather than by position.
+                var fiveHour: WindowUsage?
+                var weekly: WindowUsage?
+                for w in [snapshot.primary, snapshot.secondary].compactMap({ $0 }) {
+                    if w.windowMinutes >= 360 {
+                        weekly = w
+                    } else {
+                        fiveHour = w
+                    }
+                }
                 return ProviderUsage(
-                    fiveHour: snapshot.primary,
-                    weekly: snapshot.secondary,
+                    fiveHour: fiveHour,
+                    weekly: weekly,
                     note: "codex API"
                 )
             }

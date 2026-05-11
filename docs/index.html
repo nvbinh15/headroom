@@ -259,6 +259,41 @@
       color: var(--fg-muted);
       line-height: 1.55;
     }
+    .cmd {
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 10px;
+    }
+    .cmd code {
+      flex: 1;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 13px;
+      color: var(--fg);
+      background: none;
+      border: none;
+      padding: 0;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+    .copy-btn {
+      flex-shrink: 0;
+      padding: 5px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      background: var(--bg-soft);
+      color: var(--fg);
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      transition: opacity 0.15s, background 0.15s;
+    }
+    .copy-btn:hover { opacity: 0.85; }
+    .copy-btn:active { transform: scale(0.97); }
 
     /* Footer */
     footer {
@@ -382,12 +417,18 @@
 <section class="install" id="install">
   <h2 class="reveal">Install</h2>
   <ol class="steps reveal">
-    <li>Download <strong>Headroom.dmg</strong> from the <a href="https://github.com/nvbinh15/headroom/releases/latest">latest release</a>.</li>
-    <li>Open the disk image and drag <strong>Headroom.app</strong> to <strong>Applications</strong>.</li>
-    <li>Right-click the app and choose <strong>Open</strong> the first time.</li>
+    <li>Open <strong>Headroom.dmg</strong> and drag <strong>Headroom.app</strong> into <strong>Applications</strong>.</li>
+    <li>
+      Open <strong>Terminal</strong> and run this command to let macOS launch the app:
+      <div class="cmd">
+        <code id="xattr-cmd">xattr -dr com.apple.quarantine /Applications/Headroom.app</code>
+        <button class="copy-btn" type="button" onclick="copyXattr(this)" aria-label="Copy command">Copy</button>
+      </div>
+    </li>
+    <li>Open <strong>Headroom</strong> from Applications. It appears in your menu bar.</li>
   </ol>
   <p class="note reveal">
-    Headroom is unsigned. Right-click → Open works for first launch. If macOS still refuses, run <code>xattr -dr com.apple.quarantine /Applications/Headroom.app</code>.
+    Headroom is unsigned (no paid Apple Developer ID), so Gatekeeper blocks it by default with “Apple could not verify…”. The <code>xattr</code> command above removes the quarantine flag that triggers that warning. On macOS Sequoia and later, this is the only way to launch — the old right-click → Open bypass no longer works.
   </p>
 </section>
 
@@ -425,6 +466,16 @@
       document.body.appendChild(iframe);
     }
     iframe.src = url;
+    document.getElementById('install').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function copyXattr(btn) {
+    const text = document.getElementById('xattr-cmd').textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      const original = btn.textContent;
+      btn.textContent = 'Copied';
+      setTimeout(() => { btn.textContent = original; }, 1500);
+    });
   }
 </script>
 

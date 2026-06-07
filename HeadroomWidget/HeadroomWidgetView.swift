@@ -17,6 +17,10 @@ struct HeadroomWidgetView: View {
 private struct SmallWidgetView: View {
     let state: UsageState
 
+    private var fractionStyle: UsageFractionStyle {
+        state.showRemainingPercent ? .remaining : .used
+    }
+
     var body: some View {
         if !state.claude.isConfigured && !state.codex.isConfigured && !state.cursor.isConfigured {
             EmptyState()
@@ -24,29 +28,64 @@ private struct SmallWidgetView: View {
             VStack(spacing: 10) {
                 HStack(spacing: 12) {
                     if state.claude.isConfigured {
-                        RingView(label: "C", fraction: state.claude.fiveHour?.fraction)
+                        RingView(
+                            label: "C",
+                            fraction: state.claude.fiveHour?.fraction,
+                            isStale: UsageDisplay.isStale(state.claude),
+                            fractionStyle: fractionStyle
+                        )
                     }
                     if state.codex.isConfigured {
-                        RingView(label: "X", fraction: state.codex.fiveHour?.fraction)
+                        RingView(
+                            label: "X",
+                            fraction: state.codex.fiveHour?.fraction,
+                            isStale: UsageDisplay.isStale(state.codex),
+                            fractionStyle: fractionStyle
+                        )
                     }
                     if state.cursor.isConfigured {
-                        RingView(label: "Cu", fraction: state.cursor.fiveHour?.fraction)
+                        RingView(
+                            label: "Cu",
+                            fraction: state.cursor.fiveHour?.fraction,
+                            isStale: UsageDisplay.isStale(state.cursor),
+                            fractionStyle: fractionStyle
+                        )
                     }
                 }
                 HStack(spacing: 8) {
-                    if state.claude.isConfigured {
-                        MiniBar(label: "C·wk", fraction: state.claude.weekly?.fraction)
+                    if state.claude.isConfigured, state.claude.weekly != nil {
+                        MiniBar(
+                            label: shortLabel(state.claude.weeklyLabel ?? "Weekly"),
+                            fraction: state.claude.weekly?.fraction,
+                            fractionStyle: fractionStyle
+                        )
                     }
-                    if state.codex.isConfigured {
-                        MiniBar(label: "X·wk", fraction: state.codex.weekly?.fraction)
+                    if state.codex.isConfigured, state.codex.weekly != nil {
+                        MiniBar(
+                            label: shortLabel(state.codex.weeklyLabel ?? "Weekly"),
+                            fraction: state.codex.weekly?.fraction,
+                            fractionStyle: fractionStyle
+                        )
                     }
-                    if state.cursor.isConfigured {
-                        MiniBar(label: "Cu·API", fraction: state.cursor.weekly?.fraction)
+                    if state.cursor.isConfigured, state.cursor.weekly != nil {
+                        MiniBar(
+                            label: shortLabel(state.cursor.weeklyLabel ?? "API"),
+                            fraction: state.cursor.weekly?.fraction,
+                            fractionStyle: fractionStyle
+                        )
                     }
                 }
             }
             .padding(8)
         }
+    }
+
+    private func shortLabel(_ label: String) -> String {
+        let prefix: String
+        if label == "Weekly" { prefix = "wk" }
+        else if label == "API" { prefix = "API" }
+        else { prefix = String(label.prefix(3)) }
+        return prefix
     }
 }
 
@@ -66,25 +105,29 @@ private struct EmptyState: View {
 private struct MediumWidgetView: View {
     let state: UsageState
 
+    private var fractionStyle: UsageFractionStyle {
+        state.showRemainingPercent ? .remaining : .used
+    }
+
     var body: some View {
         if !state.claude.isConfigured && !state.codex.isConfigured && !state.cursor.isConfigured {
             EmptyState()
         } else {
             VStack(spacing: 8) {
                 if state.claude.isConfigured {
-                    ProviderRow(name: "Claude", usage: state.claude)
+                    ProviderRow(name: "Claude", usage: state.claude, fractionStyle: fractionStyle)
                 }
                 if state.claude.isConfigured && (state.codex.isConfigured || state.cursor.isConfigured) {
                     Divider()
                 }
                 if state.codex.isConfigured {
-                    ProviderRow(name: "Codex",  usage: state.codex)
+                    ProviderRow(name: "Codex", usage: state.codex, fractionStyle: fractionStyle)
                 }
                 if state.codex.isConfigured && state.cursor.isConfigured {
                     Divider()
                 }
                 if state.cursor.isConfigured {
-                    ProviderRow(name: "Cursor", usage: state.cursor)
+                    ProviderRow(name: "Cursor", usage: state.cursor, fractionStyle: fractionStyle)
                 }
             }
             .padding(12)
@@ -94,17 +137,33 @@ private struct MediumWidgetView: View {
     struct ProviderRow: View {
         let name: String
         let usage: ProviderUsage
+        let fractionStyle: UsageFractionStyle
 
         var body: some View {
             HStack(spacing: 14) {
-                Text(name)
-                    .font(.subheadline.bold())
-                    .frame(width: 56, alignment: .leading)
+                HStack(spacing: 4) {
+                    Text(name)
+                        .font(.subheadline.bold())
+                    if UsageDisplay.isStale(usage) {
+                        Image(systemName: "clock")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                    }
+                }
+                .frame(width: 56, alignment: .leading)
                 if usage.fiveHour != nil {
-                    WindowCell(title: usage.fiveHourLabel ?? "5h", window: usage.fiveHour)
+                    WindowCell(
+                        title: usage.fiveHourLabel ?? "5h",
+                        window: usage.fiveHour,
+                        fractionStyle: fractionStyle
+                    )
                 }
                 if usage.weekly != nil {
-                    WindowCell(title: usage.weeklyLabel ?? "Weekly", window: usage.weekly)
+                    WindowCell(
+                        title: usage.weeklyLabel ?? "Weekly",
+                        window: usage.weekly,
+                        fractionStyle: fractionStyle
+                    )
                 }
             }
         }
@@ -113,6 +172,7 @@ private struct MediumWidgetView: View {
     struct WindowCell: View {
         let title: String
         let window: WindowUsage?
+        let fractionStyle: UsageFractionStyle
 
         var body: some View {
             VStack(alignment: .leading, spacing: 2) {
@@ -135,7 +195,7 @@ private struct MediumWidgetView: View {
             return .accentColor
         }
         private var percentText: String {
-            window?.fraction.map { String(format: "%.0f%%", $0 * 100) } ?? "—"
+            UsageDisplay.formatFraction(window?.fraction, style: fractionStyle)
         }
         private var resetText: String {
             guard let date = window?.resetsAt else { return " " }
@@ -147,6 +207,8 @@ private struct MediumWidgetView: View {
 private struct RingView: View {
     let label: String
     let fraction: Double?
+    var isStale: Bool = false
+    var fractionStyle: UsageFractionStyle = .used
 
     var body: some View {
         ZStack {
@@ -157,8 +219,12 @@ private struct RingView: View {
                 .rotationEffect(.degrees(-90))
             VStack(spacing: 0) {
                 Text(label).font(.caption2.bold())
-                Text(fraction.map { String(format: "%.0f%%", $0 * 100) } ?? "—")
+                Text(UsageDisplay.formatFraction(fraction, style: fractionStyle))
                     .font(.caption2.monospacedDigit())
+            }
+            if isStale {
+                Circle()
+                    .strokeBorder(.orange.opacity(0.8), lineWidth: 1)
             }
         }
     }
@@ -174,13 +240,14 @@ private struct RingView: View {
 private struct MiniBar: View {
     let label: String
     let fraction: Double?
+    var fractionStyle: UsageFractionStyle = .used
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
                 Text(label).font(.caption2)
                 Spacer()
-                Text(fraction.map { String(format: "%.0f%%", $0 * 100) } ?? "—")
+                Text(UsageDisplay.formatFraction(fraction, style: fractionStyle))
                     .font(.caption2.monospacedDigit())
             }
             ProgressView(value: fraction ?? 0).tint(.accentColor)

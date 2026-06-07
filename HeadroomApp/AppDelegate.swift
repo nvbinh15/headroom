@@ -63,6 +63,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.updateStatusItemTitle()
             }
         }
+        Task { @MainActor in
+            for await _ in refreshController.$showRemainingPercent.values {
+                self.updateStatusItemTitle()
+            }
+        }
 
         refreshController.start()
     }
@@ -71,6 +76,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateStatusItemTitle() {
         let state = refreshController.state
         let density = refreshController.menuBarDensity
+        let fractionStyle: UsageFractionStyle = state.showRemainingPercent ? .remaining : .used
+
+        statusItem?.button?.toolTip = menuBarTooltip(for: state, density: density, style: fractionStyle)
 
         if density == .hidden {
             let worst = worstUsageFraction(in: state)
@@ -87,7 +95,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 assetName: "ClaudeLogo",
                 fraction: state.claude.fiveHour?.fraction,
                 weeklyFraction: state.claude.weekly?.fraction,
-                density: density
+                density: density,
+                style: fractionStyle
             ))
         }
         if state.codex.isConfigured, refreshController.menuBarShowCodex {
@@ -95,7 +104,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 assetName: "OpenAILogo",
                 fraction: state.codex.fiveHour?.fraction,
                 weeklyFraction: state.codex.weekly?.fraction,
-                density: density
+                density: density,
+                style: fractionStyle
             ))
         }
         if state.cursor.isConfigured, refreshController.menuBarShowCursor {
@@ -103,7 +113,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 assetName: "CursorLogo",
                 fraction: state.cursor.fiveHour?.fraction,
                 weeklyFraction: state.cursor.weekly?.fraction,
-                density: density
+                density: density,
+                style: fractionStyle
             ))
         }
 
@@ -125,15 +136,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         assetName: String,
         fraction: Double?,
         weeklyFraction: Double?,
-        density: MenuBarDensity
+        density: MenuBarDensity,
+        style: UsageFractionStyle
     ) -> NSAttributedString {
         let warningFraction = max(fraction ?? 0, weeklyFraction ?? 0)
-        let displayFraction = fraction ?? weeklyFraction
+        let displayFraction = UsageDisplay.displayFraction(fraction ?? weeklyFraction, style: style)
 
-        let pctText: String = displayFraction.map { "\(Int(($0 * 100).rounded()))%" } ?? "—"
+        let pctText = UsageDisplay.formatFraction(fraction ?? weeklyFraction, style: style)
         let weeklyText: String = {
             guard density == .full, let weeklyFraction else { return "" }
-            return "·\(Int((weeklyFraction * 100).rounded()))%"
+            return "·\(UsageDisplay.formatFraction(weeklyFraction, style: style))"
         }()
 
         let textColor: NSColor = {
@@ -200,6 +212,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let fraction = usage.weekly?.fraction { values.append(fraction) }
         }
         return values.max()
+    }
+
+    private func menuBarTooltip(
+        for state: UsageState,
+        density: MenuBarDensity,
+        style: UsageFractionStyle
+    ) -> String? {
+        guard density == .hidden || density == .iconsOnly else { return nil }
+        let summary = UsageDisplay.menuBarSummary(
+            state: state,
+            showClaude: refreshController.menuBarShowClaude,
+            showCodex: refreshController.menuBarShowCodex,
+            showCursor: refreshController.menuBarShowCursor,
+            style: style
+        )
+        return summary.isEmpty ? "Headroom" : summary
     }
 
     func openSettings() {

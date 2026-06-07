@@ -10,8 +10,7 @@ final class CursorProviderUsageTests: XCTestCase {
         let usage = try XCTUnwrap(CursorUsageMapper.providerUsage(
             from: response,
             planName: "Ultra",
-            membershipType: "ultra",
-            source: "API"
+            membershipType: "ultra"
         ))
 
         XCTAssertEqual(usage.fiveHourLabel, "Auto")
@@ -19,7 +18,7 @@ final class CursorProviderUsageTests: XCTestCase {
         XCTAssertEqual(usage.fiveHour?.fraction ?? 0, 0.125, accuracy: 0.0001)
         XCTAssertEqual(usage.weekly?.fraction ?? 0, 0.46444, accuracy: 0.0001)
         XCTAssertNotNil(usage.fiveHour?.resetsAt)
-        XCTAssertEqual(usage.note, "Ultra · API")
+        XCTAssertEqual(usage.planLabel, "Ultra")
     }
 
     func testMapsLegacyRequestUsage() throws {
@@ -28,14 +27,13 @@ final class CursorProviderUsageTests: XCTestCase {
 
         let usage = try XCTUnwrap(CursorUsageMapper.providerUsage(
             from: response,
-            membershipType: "enterprise",
-            source: "legacy API"
+            membershipType: "enterprise"
         ))
 
         XCTAssertEqual(usage.fiveHourLabel, "Requests")
         XCTAssertNil(usage.weekly)
         XCTAssertEqual(usage.fiveHour?.fraction ?? 0, 0.3, accuracy: 0.0001)
-        XCTAssertEqual(usage.note, "Enterprise · legacy API")
+        XCTAssertEqual(usage.planLabel, "Enterprise")
     }
 
     func testReadsCredentialsFromSQLiteFixture() throws {

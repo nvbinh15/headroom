@@ -49,12 +49,17 @@ public actor Refresher {
         self.cursorClient = cursorClient
     }
 
-    public func snapshot() async -> UsageState {
+    public func snapshot(showRemainingPercent: Bool = false) async -> UsageState {
         async let codex = readCodex()
         async let claude = readClaude()
         async let cursor = readCursor()
         let (c, x, u) = await (claude, codex, cursor)
-        return UsageState(claude: c, codex: x, cursor: u)
+        return UsageState(
+            claude: c,
+            codex: x,
+            cursor: u,
+            showRemainingPercent: showRemainingPercent
+        )
     }
 
     // MARK: - Claude
@@ -62,40 +67,74 @@ public actor Refresher {
     private func readClaude() async -> ProviderUsage {
         var creds = KeychainCredentialsLoader.loadClaude()
         var plan = creds?.plan ?? .unknown
+        let planLabel = plan.displayName
+
+        if let current = creds,
+           current.needsRefresh(),
+           current.canRefresh,
+           let refreshed = await refreshClaudeAuth(current) {
+            creds = refreshed
+            plan = refreshed.plan
+        }
 
         if let token = creds?.accessToken {
             if let cached: CachedClaudeResponse = readCache(at: configuration.claudeCacheURL),
                Date().timeIntervalSince(cached.fetchedAt) < configuration.minOAuthInterval {
-                return claudeProviderUsage(from: cached.response, plan: plan, source: "API · cached")
+                return claudeProviderUsage(
+                    from: cached.response,
+                    planLabel: planLabel,
+                    freshness: .cached,
+                    detailNote: nil
+                )
             }
             switch await claudeClient.fetch(token: token) {
             case .success(let response):
                 writeCache(CachedClaudeResponse(fetchedAt: Date(), response: response), at: configuration.claudeCacheURL)
-                return claudeProviderUsage(from: response, plan: plan, source: "API")
+                return claudeProviderUsage(from: response, planLabel: planLabel, freshness: .live, detailNote: nil)
             case .failure(let err):
-                if shouldRefreshClaudeAfterFailure(err),
-                   let refreshed = KeychainCredentialsLoader.reloadClaudeFromKeychain() {
-                    creds = refreshed
-                    plan = refreshed.plan
-                    switch await claudeClient.fetch(token: refreshed.accessToken) {
-                    case .success(let response):
-                        writeCache(CachedClaudeResponse(fetchedAt: Date(), response: response), at: configuration.claudeCacheURL)
-                        return claudeProviderUsage(from: response, plan: plan, source: "API · refreshed")
-                    case .failure:
-                        break
+                if shouldRefreshClaudeAfterFailure(err) {
+                    if let current = creds,
+                       let refreshed = await refreshClaudeAuth(current)
+                       ?? KeychainCredentialsLoader.reloadClaudeFromKeychain() {
+                        creds = refreshed
+                        plan = refreshed.plan
+                        switch await claudeClient.fetch(token: refreshed.accessToken) {
+                        case .success(let response):
+                            writeCache(CachedClaudeResponse(fetchedAt: Date(), response: response), at: configuration.claudeCacheURL)
+                            return claudeProviderUsage(from: response, planLabel: refreshed.plan.displayName, freshness: .live, detailNote: "token refreshed")
+                        case .failure:
+                            break
+                        }
                     }
                 }
                 if let cached: CachedClaudeResponse = readCache(at: configuration.claudeCacheURL) {
                     let age = Int(Date().timeIntervalSince(cached.fetchedAt) / 60)
-                    return claudeProviderUsage(from: cached.response, plan: plan, source: "API · stale \(age)m (\(describeClaude(err)))")
+                    return claudeProviderUsage(
+                        from: cached.response,
+                        planLabel: planLabel,
+                        freshness: .stale,
+                        staleAgeMinutes: age,
+                        detailNote: describeClaude(err)
+                    )
                 }
-                return localClaudeEstimate(plan: plan, note: "estimate — API \(describeClaude(err))")
+                return localClaudeEstimate(
+                    plan: plan,
+                    planLabel: planLabel,
+                    freshness: .offline,
+                    detailNote: describeClaude(err)
+                )
             }
         }
         // Token unreadable, but a prior API response may still be on disk.
         if let cached: CachedClaudeResponse = readCache(at: configuration.claudeCacheURL) {
             let age = Int(Date().timeIntervalSince(cached.fetchedAt) / 60)
-            return claudeProviderUsage(from: cached.response, plan: plan, source: "API · stale \(age)m (no keychain auth)")
+            return claudeProviderUsage(
+                from: cached.response,
+                planLabel: planLabel,
+                freshness: .stale,
+                staleAgeMinutes: age,
+                detailNote: "no keychain auth"
+            )
         }
         // No keychain creds. If the user has never run Claude Code locally either,
         // treat the provider as unconfigured so the UI hides it.
@@ -103,9 +142,29 @@ public actor Refresher {
             .homeDirectoryForCurrentUser
             .appendingPathComponent(".claude/projects", isDirectory: true)
         if !FileManager.default.fileExists(atPath: claudeProjects.path) {
-            return ProviderUsage(note: "Claude not signed in", isConfigured: false)
+            return signedOutUsage(providerName: "Claude")
         }
-        return localClaudeEstimate(plan: plan, note: "estimate — no keychain auth")
+        return localClaudeEstimate(
+            plan: plan,
+            planLabel: planLabel,
+            freshness: .estimate,
+            detailNote: "no keychain auth"
+        )
+    }
+
+    private func refreshClaudeAuth(_ creds: ClaudeCredentials) async -> ClaudeCredentials? {
+        guard creds.canRefresh else { return nil }
+        guard let refreshed = try? await ClaudeTokenRefresher.refresh(creds) else { return nil }
+        return refreshed
+    }
+
+    private func signedOutUsage(providerName: String) -> ProviderUsage {
+        ProviderUsage(
+            planLabel: providerName,
+            freshness: .signedOut,
+            note: UsageDisplay.signInMessage(for: providerName),
+            isConfigured: false
+        )
     }
 
     private func describeClaude(_ err: OAuthUsageClient.FetchError) -> String {
@@ -125,7 +184,13 @@ public actor Refresher {
         }
     }
 
-    private func claudeProviderUsage(from r: OAuthUsageClient.Response, plan: ClaudePlan, source: String) -> ProviderUsage {
+    private func claudeProviderUsage(
+        from r: OAuthUsageClient.Response,
+        planLabel: String,
+        freshness: UsageFreshness,
+        staleAgeMinutes: Int? = nil,
+        detailNote: String? = nil
+    ) -> ProviderUsage {
         let fiveHour = r.five_hour.flatMap { b -> WindowUsage? in
             guard let util = b.utilization else { return nil }
             return WindowUsage(fraction: util / 100.0, resetsAt: b.resets_at, windowMinutes: 300)
@@ -140,23 +205,46 @@ public actor Refresher {
             guard let util = b.utilization else { return nil }
             return WindowUsage(fraction: util / 100.0, resetsAt: b.resets_at, windowMinutes: 10080)
         }
-        return ProviderUsage(fiveHour: fiveHour, weekly: weekly, note: "\(plan.displayName) · \(source)")
+        return ProviderUsage(
+            fiveHour: fiveHour,
+            weekly: weekly
+        ).withMetadata(
+            planLabel: planLabel,
+            freshness: freshness,
+            staleAgeMinutes: staleAgeMinutes,
+            detailNote: detailNote
+        )
     }
 
-    private func localClaudeEstimate(plan: ClaudePlan, note: String) -> ProviderUsage {
+    private func localClaudeEstimate(
+        plan: ClaudePlan,
+        planLabel: String,
+        freshness: UsageFreshness,
+        detailNote: String? = nil
+    ) -> ProviderUsage {
         let limits = configuration.claudeOverrideLimits ?? PlanLimits.defaults(for: plan)
-        var usage = ClaudeUsageReader(plan: plan, limits: limits).read()
-        usage.note = "\(plan.displayName) · \(note)"
-        return usage
+        let usage = ClaudeUsageReader(plan: plan, limits: limits).read()
+        return usage.withMetadata(
+            planLabel: planLabel,
+            freshness: freshness,
+            detailNote: detailNote
+        )
     }
 
     // MARK: - Codex
 
     private func readCodex() async -> ProviderUsage {
         if var auth = CodexAuth.loadDefault() {
+            let planLabel = auth.planType.map { "Codex \($0)" } ?? "Codex"
             if let cached: CachedCodexResponse = readCache(at: configuration.codexCacheURL),
                Date().timeIntervalSince(cached.fetchedAt) < configuration.minOAuthInterval {
-                return codexProviderUsage(from: cached.response, fetchedAt: cached.fetchedAt, source: "API · cached")
+                return codexProviderUsage(
+                    from: cached.response,
+                    fetchedAt: cached.fetchedAt,
+                    planLabel: planLabel,
+                    freshness: .cached,
+                    detailNote: nil
+                )
             }
 
             if auth.needsRefresh(),
@@ -168,7 +256,7 @@ public actor Refresher {
             case .success(let response):
                 let now = Date()
                 writeCache(CachedCodexResponse(fetchedAt: now, response: response), at: configuration.codexCacheURL)
-                return codexProviderUsage(from: response, fetchedAt: now, source: "API")
+                return codexProviderUsage(from: response, fetchedAt: now, planLabel: planLabel, freshness: .live, detailNote: nil)
             case .failure(let err):
                 if shouldRefreshAfterCodexFailure(err),
                    let refreshed = await refreshCodexAuth(auth),
@@ -177,30 +265,43 @@ public actor Refresher {
                     case .success(let response):
                         let now = Date()
                         writeCache(CachedCodexResponse(fetchedAt: now, response: response), at: configuration.codexCacheURL)
-                        return codexProviderUsage(from: response, fetchedAt: now, source: "API · refreshed")
+                        return codexProviderUsage(from: response, fetchedAt: now, planLabel: planLabel, freshness: .live, detailNote: "token refreshed")
                     case .failure:
                         break
                     }
                 }
                 if let cached: CachedCodexResponse = readCache(at: configuration.codexCacheURL) {
                     let age = Int(Date().timeIntervalSince(cached.fetchedAt) / 60)
-                    return codexProviderUsage(from: cached.response, fetchedAt: cached.fetchedAt, source: "API · stale \(age)m (\(describeCodex(err)))")
+                    return codexProviderUsage(
+                        from: cached.response,
+                        fetchedAt: cached.fetchedAt,
+                        planLabel: planLabel,
+                        freshness: .stale,
+                        staleAgeMinutes: age,
+                        detailNote: describeCodex(err)
+                    )
                 }
                 // Last resort — JSONL snapshot from the most recent session.
-                var fallback = CodexUsageReader().read()
-                fallback.note = (fallback.note ?? "") + " · API \(describeCodex(err))"
-                return fallback
+                let fallback = CodexUsageReader().read()
+                return fallback.withMetadata(
+                    planLabel: planLabel,
+                    freshness: .offline,
+                    detailNote: describeCodex(err)
+                )
             }
         }
         // No auth.json. If the user has never run Codex locally either,
         // treat the provider as unconfigured so the UI hides it.
         let codexSessions = CodexAuth.codexHome().appendingPathComponent("sessions", isDirectory: true)
         if !FileManager.default.fileExists(atPath: codexSessions.path) {
-            return ProviderUsage(note: "Codex not signed in", isConfigured: false)
+            return signedOutUsage(providerName: "Codex")
         }
-        var fallback = CodexUsageReader().read()
-        fallback.note = (fallback.note ?? "codex") + " · no auth"
-        return fallback
+        let fallback = CodexUsageReader().read()
+        return fallback.withMetadata(
+            planLabel: "Codex",
+            freshness: .estimate,
+            detailNote: "no auth"
+        )
     }
 
     private func refreshCodexAuth(_ auth: CodexAuth) async -> CodexAuth? {
@@ -228,7 +329,14 @@ public actor Refresher {
         }
     }
 
-    private func codexProviderUsage(from r: CodexUsageClient.Response, fetchedAt: Date, source: String) -> ProviderUsage {
+    private func codexProviderUsage(
+        from r: CodexUsageClient.Response,
+        fetchedAt: Date,
+        planLabel: String,
+        freshness: UsageFreshness,
+        staleAgeMinutes: Int? = nil,
+        detailNote: String? = nil
+    ) -> ProviderUsage {
         // /wham/usage surfaces the *currently-enforced* bucket as `primary_window`
         // — when the weekly cap is hit, the weekly bucket arrives in the primary
         // slot. Classify by window length, not by position.
@@ -242,8 +350,13 @@ public actor Refresher {
                 fiveHour = parsed
             }
         }
-        let plan = r.plan_type.map { "Codex \($0)" } ?? "Codex"
-        return ProviderUsage(fiveHour: fiveHour, weekly: weekly, note: "\(plan) · \(source)")
+        let resolvedPlan = r.plan_type.map { "Codex \($0)" } ?? planLabel
+        return ProviderUsage(fiveHour: fiveHour, weekly: weekly).withMetadata(
+            planLabel: resolvedPlan,
+            freshness: freshness,
+            staleAgeMinutes: staleAgeMinutes,
+            detailNote: detailNote
+        )
     }
 
     private func isCodexWeeklyWindow(seconds: Int?, minutes: Int) -> Bool {
@@ -281,14 +394,14 @@ public actor Refresher {
     private func readCursor() async -> ProviderUsage {
         guard var credentials = CursorCredentialsLoader.load() else {
             if !CursorCredentialsLoader.cursorAppSupportExists() {
-                return ProviderUsage(note: "Cursor not signed in", isConfigured: false)
+                return signedOutUsage(providerName: "Cursor")
             }
-            return ProviderUsage(note: "Cursor not signed in", isConfigured: false)
+            return signedOutUsage(providerName: "Cursor")
         }
 
         if let cached: CachedCursorResponse = readCache(at: configuration.cursorCacheURL),
            Date().timeIntervalSince(cached.fetchedAt) < configuration.minOAuthInterval {
-            return cursorProviderUsage(from: cached, source: "API · cached")
+            return cursorProviderUsage(from: cached, freshness: .cached, detailNote: nil)
         }
 
         if credentials.needsRefresh(),
@@ -299,7 +412,7 @@ public actor Refresher {
         switch await fetchCursorUsage(credentials: credentials) {
         case .success(let cached):
             writeCache(cached, at: configuration.cursorCacheURL)
-            return cursorProviderUsage(from: cached, source: "API")
+            return cursorProviderUsage(from: cached, freshness: .live, detailNote: nil)
         case .failure(let err):
             if shouldRefreshAfterCursorFailure(err),
                let refreshed = await refreshCursorAuth(credentials),
@@ -307,22 +420,28 @@ public actor Refresher {
                 switch await fetchCursorUsage(credentials: refreshed) {
                 case .success(let cached):
                     writeCache(cached, at: configuration.cursorCacheURL)
-                    return cursorProviderUsage(from: cached, source: "API · refreshed")
+                    return cursorProviderUsage(from: cached, freshness: .live, detailNote: "token refreshed")
                 case .failure:
                     break
                 }
             }
             if let cached: CachedCursorResponse = readCache(at: configuration.cursorCacheURL) {
                 let age = Int(Date().timeIntervalSince(cached.fetchedAt) / 60)
-                return cursorProviderUsage(from: cached, source: "API · stale \(age)m (\(describeCursor(err)))")
+                return cursorProviderUsage(
+                    from: cached,
+                    freshness: .stale,
+                    staleAgeMinutes: age,
+                    detailNote: describeCursor(err)
+                )
             }
             switch await fetchCursorLegacyUsage(credentials: credentials) {
             case .success(let usage):
                 return usage
             case .failure:
-                return ProviderUsage(
-                    note: "Cursor · API \(describeCursor(err))",
-                    isConfigured: true
+                return ProviderUsage(isConfigured: true).withMetadata(
+                    planLabel: "Cursor",
+                    freshness: .offline,
+                    detailNote: describeCursor(err)
                 )
             }
         }
@@ -356,12 +475,15 @@ public actor Refresher {
         case .success(let legacy):
             guard let usage = CursorUsageMapper.providerUsage(
                 from: legacy,
-                membershipType: credentials.membershipType,
-                source: "legacy API"
+                membershipType: credentials.membershipType
             ) else {
                 return .failure(.emptyUsage)
             }
-            return .success(usage)
+            return .success(usage.withMetadata(
+                planLabel: usage.planLabel ?? "Cursor",
+                freshness: .live,
+                detailNote: "legacy API"
+            ))
         case .failure(let err):
             return .failure(err)
         }
@@ -402,24 +524,42 @@ public actor Refresher {
         }
     }
 
-    private func cursorProviderUsage(from cached: CachedCursorResponse, source: String) -> ProviderUsage {
+    private func cursorProviderUsage(
+        from cached: CachedCursorResponse,
+        freshness: UsageFreshness,
+        staleAgeMinutes: Int? = nil,
+        detailNote: String? = nil
+    ) -> ProviderUsage {
         if let mapped = CursorUsageMapper.providerUsage(
             from: cached.usage,
             planName: cached.planName,
-            membershipType: cached.membershipType,
-            source: source
+            membershipType: cached.membershipType
         ) {
-            return mapped
+            return mapped.withMetadata(
+                planLabel: mapped.planLabel ?? "Cursor",
+                freshness: freshness,
+                staleAgeMinutes: staleAgeMinutes,
+                detailNote: detailNote
+            )
         }
         if let legacy = cached.legacyUsage,
            let mapped = CursorUsageMapper.providerUsage(
                from: legacy,
-               membershipType: cached.membershipType,
-               source: source
+               membershipType: cached.membershipType
            ) {
-            return mapped
+            return mapped.withMetadata(
+                planLabel: mapped.planLabel ?? "Cursor",
+                freshness: freshness,
+                staleAgeMinutes: staleAgeMinutes,
+                detailNote: detailNote
+            )
         }
-        return ProviderUsage(note: "Cursor · \(source)", isConfigured: true)
+        return ProviderUsage(isConfigured: true).withMetadata(
+            planLabel: "Cursor",
+            freshness: freshness,
+            staleAgeMinutes: staleAgeMinutes,
+            detailNote: detailNote
+        )
     }
 
     // MARK: - Cache

@@ -17,6 +17,14 @@ public struct ClaudeCredentials: Sendable, Codable {
         guard let expiresAt else { return false }
         return expiresAt <= now.addingTimeInterval(leeway)
     }
+
+    public var canRefresh: Bool {
+        !(refreshToken?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+    }
+
+    public func needsRefresh(leeway: TimeInterval = 60, now: Date = Date()) -> Bool {
+        isExpired(leeway: leeway, now: now)
+    }
 }
 
 public enum KeychainCredentialsLoader {
@@ -80,6 +88,42 @@ public enum KeychainCredentialsLoader {
         else { return nil }
         persist(credentials: credentials, rawData: data)
         return credentials
+    }
+
+    /// Deletes Headroom's cached Claude credentials so the next read goes back to
+    /// Claude Code's keychain or ~/.claude/.credentials.json.
+    public static func deleteHeadroomCredentialsFile(
+        fileManager: FileManager = .default
+    ) {
+        memoryLock.lock()
+        memoryCredentials = nil
+        memoryLock.unlock()
+        let url = headroomCredentialsFileURL(fileManager: fileManager)
+        try? fileManager.removeItem(at: url)
+    }
+
+    /// Writes refreshed OAuth tokens to Headroom's credential cache.
+    public static func persistRefreshedClaude(_ credentials: ClaudeCredentials) {
+        var oauth: [String: Any] = [
+            "accessToken": credentials.accessToken
+        ]
+        if let refreshToken = credentials.refreshToken {
+            oauth["refreshToken"] = refreshToken
+        }
+        if let expiresAt = credentials.expiresAt {
+            oauth["expiresAt"] = Int(expiresAt.timeIntervalSince1970 * 1000)
+        }
+        if let subscriptionType = credentials.subscriptionType {
+            oauth["subscriptionType"] = subscriptionType
+        }
+        if let rateLimitTier = credentials.rateLimitTier {
+            oauth["rateLimitTier"] = rateLimitTier
+        }
+        let payload: [String: Any] = ["claudeAiOauth": oauth]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]) else {
+            return
+        }
+        persist(credentials: credentials, rawData: data)
     }
 
     static func parseClaudeCredentials(data: Data) -> ClaudeCredentials? {

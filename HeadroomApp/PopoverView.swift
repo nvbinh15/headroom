@@ -32,6 +32,10 @@ private struct HoverTextButtonStyle: ButtonStyle {
 struct PopoverView: View {
     @EnvironmentObject var controller: RefreshController
 
+    private var fractionStyle: UsageFractionStyle {
+        controller.state.showRemainingPercent ? .remaining : .used
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
@@ -51,18 +55,20 @@ struct PopoverView: View {
             }
 
             if controller.state.claude.isConfigured {
-                ProviderRow(name: "Claude", usage: controller.state.claude)
+                ProviderRow(name: "Claude", usage: controller.state.claude, fractionStyle: fractionStyle)
             }
             if controller.state.codex.isConfigured {
-                ProviderRow(name: "Codex",  usage: controller.state.codex)
+                ProviderRow(name: "Codex", usage: controller.state.codex, fractionStyle: fractionStyle)
             }
             if controller.state.cursor.isConfigured {
-                ProviderRow(name: "Cursor", usage: controller.state.cursor)
+                ProviderRow(name: "Cursor", usage: controller.state.cursor, fractionStyle: fractionStyle)
             }
             if !controller.state.claude.isConfigured
                 && !controller.state.codex.isConfigured
                 && !controller.state.cursor.isConfigured {
                 EmptyStateView()
+            } else {
+                missingProviderHints
             }
 
             HStack {
@@ -86,6 +92,34 @@ struct PopoverView: View {
         .frame(width: 320)
     }
 
+    @ViewBuilder
+    private var missingProviderHints: some View {
+        let hints = missingProviderHintRows
+        if !hints.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(hints, id: \.self) { hint in
+                    Text(hint)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private var missingProviderHintRows: [String] {
+        var rows: [String] = []
+        if !controller.state.claude.isConfigured {
+            rows.append("Claude — \(UsageDisplay.providerSignInHint(name: "Claude"))")
+        }
+        if !controller.state.codex.isConfigured {
+            rows.append("Codex — \(UsageDisplay.providerSignInHint(name: "Codex"))")
+        }
+        if !controller.state.cursor.isConfigured {
+            rows.append("Cursor — \(UsageDisplay.providerSignInHint(name: "Cursor"))")
+        }
+        return rows
+    }
+
     private func relativeTimestamp(now: Date) -> String {
         guard controller.state.lastUpdated != .distantPast else { return "never" }
         let f = RelativeDateTimeFormatter()
@@ -99,10 +133,15 @@ struct EmptyStateView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("No providers signed in")
                 .font(.subheadline.bold())
-            Text("Sign in to Claude Code, Codex CLI, or Cursor to see usage here.")
+            Text("Claude — \(UsageDisplay.providerSignInHint(name: "Claude"))")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            Text("Codex — \(UsageDisplay.providerSignInHint(name: "Codex"))")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text("Cursor — \(UsageDisplay.providerSignInHint(name: "Cursor"))")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(8)
@@ -114,24 +153,31 @@ struct EmptyStateView: View {
 struct ProviderRow: View {
     let name: String
     let usage: ProviderUsage
+    var fractionStyle: UsageFractionStyle = .used
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(name).font(.subheadline.bold())
+                if UsageDisplay.isStale(usage) {
+                    Image(systemName: "clock.badge.exclamationmark")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                        .help("Data may be outdated")
+                }
                 Spacer()
                 if let note = usage.note {
                     Text(note)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        .lineLimit(2)
                 }
             }
             if usage.fiveHour != nil {
-                WindowBar(label: usage.fiveHourLabel ?? "5h", window: usage.fiveHour)
+                WindowBar(label: usage.fiveHourLabel ?? "5h", window: usage.fiveHour, fractionStyle: fractionStyle)
             }
             if usage.weekly != nil {
-                WindowBar(label: usage.weeklyLabel ?? "Weekly", window: usage.weekly)
+                WindowBar(label: usage.weeklyLabel ?? "Weekly", window: usage.weekly, fractionStyle: fractionStyle)
             }
         }
         .padding(8)
@@ -143,6 +189,7 @@ struct ProviderRow: View {
 struct WindowBar: View {
     let label: String
     let window: WindowUsage?
+    var fractionStyle: UsageFractionStyle = .used
 
     var body: some View {
         HStack {
@@ -152,9 +199,6 @@ struct WindowBar: View {
             Text(percentText)
                 .font(.caption.monospacedDigit())
                 .frame(width: 44, alignment: .trailing)
-            // TimelineView re-renders the countdown every 30s so it stays
-            // correct between data refreshes (and survives App Nap pausing
-            // the refresh timer).
             TimelineView(.periodic(from: .now, by: 30)) { context in
                 Text(resetText(now: context.date))
                     .font(.caption2.monospacedDigit())
@@ -172,8 +216,7 @@ struct WindowBar: View {
     }
 
     private var percentText: String {
-        guard let f = window?.fraction else { return "—" }
-        return String(format: "%.0f%%", f * 100)
+        UsageDisplay.formatFraction(window?.fraction, style: fractionStyle)
     }
 
     private func resetText(now: Date) -> String {

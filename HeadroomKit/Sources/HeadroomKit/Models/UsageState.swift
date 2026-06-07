@@ -35,6 +35,12 @@ public struct ProviderUsage: Codable, Sendable, Equatable {
     public var fiveHourLabel: String?
     /// Override for the secondary window label in UI/CLI (default "Weekly").
     public var weeklyLabel: String?
+    /// Human-facing plan label, e.g. "Max 5×", "Codex team", "Pro".
+    public var planLabel: String?
+    public var freshness: UsageFreshness?
+    public var staleAgeMinutes: Int?
+    /// Technical detail shown in Settings only.
+    public var detailNote: String?
     /// Free-form note: plan tier, "from API", "estimate", "no recent sessions", etc.
     public var note: String?
     /// False when the provider has no auth and no local data on disk. UI surfaces
@@ -46,6 +52,10 @@ public struct ProviderUsage: Codable, Sendable, Equatable {
         weekly: WindowUsage? = nil,
         fiveHourLabel: String? = nil,
         weeklyLabel: String? = nil,
+        planLabel: String? = nil,
+        freshness: UsageFreshness? = nil,
+        staleAgeMinutes: Int? = nil,
+        detailNote: String? = nil,
         note: String? = nil,
         isConfigured: Bool = true
     ) {
@@ -53,6 +63,10 @@ public struct ProviderUsage: Codable, Sendable, Equatable {
         self.weekly = weekly
         self.fiveHourLabel = fiveHourLabel
         self.weeklyLabel = weeklyLabel
+        self.planLabel = planLabel
+        self.freshness = freshness
+        self.staleAgeMinutes = staleAgeMinutes
+        self.detailNote = detailNote
         self.note = note
         self.isConfigured = isConfigured
     }
@@ -63,9 +77,16 @@ public struct ProviderUsage: Codable, Sendable, Equatable {
         self.weekly = try c.decodeIfPresent(WindowUsage.self, forKey: .weekly)
         self.fiveHourLabel = try c.decodeIfPresent(String.self, forKey: .fiveHourLabel)
         self.weeklyLabel = try c.decodeIfPresent(String.self, forKey: .weeklyLabel)
+        self.planLabel = try c.decodeIfPresent(String.self, forKey: .planLabel)
+        self.freshness = try c.decodeIfPresent(UsageFreshness.self, forKey: .freshness)
+        self.staleAgeMinutes = try c.decodeIfPresent(Int.self, forKey: .staleAgeMinutes)
+        self.detailNote = try c.decodeIfPresent(String.self, forKey: .detailNote)
         self.note = try c.decodeIfPresent(String.self, forKey: .note)
         // Default to true for state.json files written by older builds.
         self.isConfigured = try c.decodeIfPresent(Bool.self, forKey: .isConfigured) ?? true
+        if self.note == nil, self.planLabel != nil || self.freshness != nil {
+            self.note = UsageDisplay.statusNote(for: self)
+        }
     }
 }
 
@@ -73,17 +94,20 @@ public struct UsageState: Codable, Sendable, Equatable {
     public var claude: ProviderUsage
     public var codex: ProviderUsage
     public var cursor: ProviderUsage
+    public var showRemainingPercent: Bool
     public var lastUpdated: Date
 
     public init(
         claude: ProviderUsage,
         codex: ProviderUsage,
         cursor: ProviderUsage = ProviderUsage(isConfigured: false),
+        showRemainingPercent: Bool = false,
         lastUpdated: Date = Date()
     ) {
         self.claude = claude
         self.codex = codex
         self.cursor = cursor
+        self.showRemainingPercent = showRemainingPercent
         self.lastUpdated = lastUpdated
     }
 
@@ -93,6 +117,7 @@ public struct UsageState: Codable, Sendable, Equatable {
         self.codex = try c.decode(ProviderUsage.self, forKey: .codex)
         self.cursor = try c.decodeIfPresent(ProviderUsage.self, forKey: .cursor)
             ?? ProviderUsage(isConfigured: false)
+        self.showRemainingPercent = try c.decodeIfPresent(Bool.self, forKey: .showRemainingPercent) ?? false
         self.lastUpdated = try c.decode(Date.self, forKey: .lastUpdated)
     }
 
@@ -100,6 +125,7 @@ public struct UsageState: Codable, Sendable, Equatable {
         claude: ProviderUsage(),
         codex: ProviderUsage(),
         cursor: ProviderUsage(isConfigured: false),
+        showRemainingPercent: false,
         lastUpdated: .distantPast
     )
 }

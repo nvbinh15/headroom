@@ -81,6 +81,9 @@ struct SettingsView: View {
                     }
                 }
                 .pickerStyle(.segmented)
+                .onChange(of: controller.menuBarDensity) { _, _ in
+                    DisplayPreferences.markDensityExplicitlySet()
+                }
 
                 Toggle("Claude", isOn: $controller.menuBarShowClaude)
                     .disabled(!controller.state.claude.isConfigured || controller.menuBarDensity == .hidden)
@@ -116,11 +119,29 @@ struct SettingsView: View {
             }
 
             Section {
+                Toggle("Show remaining %", isOn: $controller.showRemainingPercent)
+                Toggle("Low headroom warnings", isOn: $controller.lowHeadroomWarnings)
+            } header: {
+                Text("Display")
+            } footer: {
+                Text("Remaining % shows headroom instead of used. Warnings notify once when any window crosses 70% or 90% used.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
                 HStack {
-                    Button("Reset caches") {
-                        Task { await controller.resetCachesAndRefresh() }
+                    Button("Clear API cache") {
+                        Task { await controller.clearAPICachesAndRefresh() }
                     }
                     .buttonStyle(HoverBackgroundButtonStyle())
+                    Button("Re-read Claude login") {
+                        Task { await controller.rereadClaudeLoginAndRefresh() }
+                    }
+                    .buttonStyle(HoverBackgroundButtonStyle())
+                    Spacer()
+                }
+                HStack {
                     Button("Open data folder") {
                         controller.openDataFolder()
                     }
@@ -130,22 +151,22 @@ struct SettingsView: View {
             } header: {
                 Text("Data")
             } footer: {
-                Text("Reset caches forces a fresh API call. The data folder contains the snapshot the widget reads.")
+                Text("Clear API cache forces a fresh usage fetch. Re-read Claude login drops Headroom's cached copy and reads Claude Code's keychain again.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             Section {
                 LabeledContent("Claude") {
-                    Text(controller.state.claude.note ?? "—")
+                    Text(UsageDisplay.settingsStatusText(for: controller.state.claude))
                         .foregroundStyle(.secondary)
                 }
                 LabeledContent("Codex") {
-                    Text(controller.state.codex.note ?? "—")
+                    Text(UsageDisplay.settingsStatusText(for: controller.state.codex))
                         .foregroundStyle(.secondary)
                 }
                 LabeledContent("Cursor") {
-                    Text(controller.state.cursor.note ?? "—")
+                    Text(UsageDisplay.settingsStatusText(for: controller.state.cursor))
                         .foregroundStyle(.secondary)
                 }
                 LabeledContent("Updated") {
@@ -209,7 +230,7 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)  // let the window's glass show through
-        .frame(width: 480, height: 520)
+        .frame(width: 480, height: 580)
     }
 
     private var intervalLabel: String {

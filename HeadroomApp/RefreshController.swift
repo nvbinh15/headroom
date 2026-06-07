@@ -26,6 +26,12 @@ final class RefreshController: ObservableObject {
     @Published var menuBarShowCursor: Bool {
         didSet { MenuBarPreferences.save(showCursor: menuBarShowCursor) }
     }
+    @Published var showRemainingPercent: Bool {
+        didSet { DisplayPreferences.save(showRemainingPercent: showRemainingPercent) }
+    }
+    @Published var lowHeadroomWarnings: Bool {
+        didSet { DisplayPreferences.save(lowHeadroomWarnings: lowHeadroomWarnings) }
+    }
 
     let refresher: Refresher
     private let stateURL: URL
@@ -38,6 +44,8 @@ final class RefreshController: ObservableObject {
         self.menuBarShowClaude = MenuBarPreferences.loadShowClaude()
         self.menuBarShowCodex = MenuBarPreferences.loadShowCodex()
         self.menuBarShowCursor = MenuBarPreferences.loadShowCursor()
+        self.showRemainingPercent = DisplayPreferences.loadShowRemainingPercent()
+        self.lowHeadroomWarnings = DisplayPreferences.loadLowHeadroomWarnings()
 
         self.stateURL = SharedStatePath.url
         self.refresher = Refresher(configuration: .init(minOAuthInterval: 5 * 60))
@@ -71,10 +79,20 @@ final class RefreshController: ObservableObject {
         isRefreshing = true
         defer { isRefreshing = false }
 
-        let next = await refresher.snapshot()
+        let next = await refresher.snapshot(showRemainingPercent: showRemainingPercent)
+        applyDefaultDensityIfNeeded(state: next)
         self.state = next
         writeState(next)
+        UsageNotifier.shared.evaluate(state: next, enabled: lowHeadroomWarnings)
         WidgetCenter.shared.reloadAllTimelines()
+    }
+
+    private func applyDefaultDensityIfNeeded(state: UsageState) {
+        guard !DisplayPreferences.isDensityExplicitlySet() else { return }
+        let configuredCount = [state.claude, state.codex, state.cursor].filter(\.isConfigured).count
+        if configuredCount >= 3, menuBarDensity != .hidden {
+            menuBarDensity = .hidden
+        }
     }
 
     private func writeState(_ state: UsageState) {
@@ -86,15 +104,18 @@ final class RefreshController: ObservableObject {
 
     // MARK: - Settings actions
 
-    /// Deletes the on-disk caches for the live API responses, then forces a
-    /// refresh so the user sees fresh numbers immediately.
-    func resetCachesAndRefresh() async {
+    func clearAPICachesAndRefresh() async {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
         let dir = caches.appendingPathComponent("Headroom", isDirectory: true)
         try? FileManager.default.removeItem(at: dir.appendingPathComponent("claude-oauth-usage.json"))
         try? FileManager.default.removeItem(at: dir.appendingPathComponent("codex-wham-usage.json"))
         try? FileManager.default.removeItem(at: dir.appendingPathComponent("cursor-usage.json"))
         await refresh()
+    }
+
+    func rereadClaudeLoginAndRefresh() async {
+        KeychainCredentialsLoader.deleteHeadroomCredentialsFile()
+        await clearAPICachesAndRefresh()
     }
 
     /// Reveals the shared-state directory in Finder.

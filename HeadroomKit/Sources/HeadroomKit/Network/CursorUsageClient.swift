@@ -248,8 +248,7 @@ public enum CursorUsageMapper {
     public static func providerUsage(
         from period: CursorUsageClient.PeriodUsageResponse,
         planName: String?,
-        membershipType: String?,
-        source: String
+        membershipType: String?
     ) -> ProviderUsage? {
         guard let planUsage = period.planUsage else { return nil }
 
@@ -276,15 +275,14 @@ public enum CursorUsageMapper {
             weekly: apiWindow,
             fiveHourLabel: "Auto",
             weeklyLabel: "API",
-            note: "\(displayPlan) · \(source)"
+            planLabel: displayPlan
         )
     }
 
     public static func providerUsage(
         from legacy: CursorUsageClient.LegacyUsageResponse,
         modelKey: String = defaultLegacyModelKey,
-        membershipType: String?,
-        source: String
+        membershipType: String?
     ) -> ProviderUsage? {
         let bucket = legacy.modelBuckets[modelKey]
             ?? legacy.modelBuckets.values.first { ($0.maxRequestUsage ?? 0) > 0 }
@@ -307,7 +305,7 @@ public enum CursorUsageMapper {
             weekly: nil,
             fiveHourLabel: "Requests",
             weeklyLabel: nil,
-            note: "\(membershipType?.capitalized ?? "Cursor") · \(source)"
+            planLabel: membershipType?.capitalized ?? "Cursor"
         )
     }
 

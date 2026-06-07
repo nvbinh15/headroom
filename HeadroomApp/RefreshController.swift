@@ -14,6 +14,18 @@ final class RefreshController: ObservableObject {
             restartTimer()
         }
     }
+    @Published var menuBarDensity: MenuBarDensity {
+        didSet { MenuBarPreferences.save(density: menuBarDensity) }
+    }
+    @Published var menuBarShowClaude: Bool {
+        didSet { MenuBarPreferences.save(showClaude: menuBarShowClaude) }
+    }
+    @Published var menuBarShowCodex: Bool {
+        didSet { MenuBarPreferences.save(showCodex: menuBarShowCodex) }
+    }
+    @Published var menuBarShowCursor: Bool {
+        didSet { MenuBarPreferences.save(showCursor: menuBarShowCursor) }
+    }
 
     let refresher: Refresher
     private let stateURL: URL
@@ -22,6 +34,10 @@ final class RefreshController: ObservableObject {
     init() {
         let configured = UserDefaults.standard.double(forKey: "refreshIntervalSeconds")
         self.refreshIntervalSeconds = configured > 0 ? configured : 60
+        self.menuBarDensity = MenuBarPreferences.loadDensity()
+        self.menuBarShowClaude = MenuBarPreferences.loadShowClaude()
+        self.menuBarShowCodex = MenuBarPreferences.loadShowCodex()
+        self.menuBarShowCursor = MenuBarPreferences.loadShowCursor()
 
         self.stateURL = SharedStatePath.url
         self.refresher = Refresher(configuration: .init(minOAuthInterval: 5 * 60))
@@ -77,6 +93,7 @@ final class RefreshController: ObservableObject {
         let dir = caches.appendingPathComponent("Headroom", isDirectory: true)
         try? FileManager.default.removeItem(at: dir.appendingPathComponent("claude-oauth-usage.json"))
         try? FileManager.default.removeItem(at: dir.appendingPathComponent("codex-wham-usage.json"))
+        try? FileManager.default.removeItem(at: dir.appendingPathComponent("cursor-usage.json"))
         await refresh()
     }
 

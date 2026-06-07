@@ -56,7 +56,12 @@ struct PopoverView: View {
             if controller.state.codex.isConfigured {
                 ProviderRow(name: "Codex",  usage: controller.state.codex)
             }
-            if !controller.state.claude.isConfigured && !controller.state.codex.isConfigured {
+            if controller.state.cursor.isConfigured {
+                ProviderRow(name: "Cursor", usage: controller.state.cursor)
+            }
+            if !controller.state.claude.isConfigured
+                && !controller.state.codex.isConfigured
+                && !controller.state.cursor.isConfigured {
                 EmptyStateView()
             }
 
@@ -94,7 +99,7 @@ struct EmptyStateView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("No providers signed in")
                 .font(.subheadline.bold())
-            Text("Sign in to Claude Code or Codex CLI to see usage here.")
+            Text("Sign in to Claude Code, Codex CLI, or Cursor to see usage here.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -122,8 +127,12 @@ struct ProviderRow: View {
                         .lineLimit(1)
                 }
             }
-            WindowBar(label: "5h",     window: usage.fiveHour)
-            WindowBar(label: "Weekly", window: usage.weekly)
+            if usage.fiveHour != nil {
+                WindowBar(label: usage.fiveHourLabel ?? "5h", window: usage.fiveHour)
+            }
+            if usage.weekly != nil {
+                WindowBar(label: usage.weeklyLabel ?? "Weekly", window: usage.weekly)
+            }
         }
         .padding(8)
         .background(.quaternary.opacity(0.5))

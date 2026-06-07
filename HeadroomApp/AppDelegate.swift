@@ -37,9 +37,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .environmentObject(refreshController)
         )
 
-        // Re-render the status item label whenever state changes.
+        // Re-render the status item when usage or menu-bar prefs change.
         Task { @MainActor in
             for await _ in refreshController.$state.values {
+                self.updateStatusItemTitle()
+            }
+        }
+        Task { @MainActor in
+            for await _ in refreshController.$menuBarDensity.values {
+                self.updateStatusItemTitle()
+            }
+        }
+        Task { @MainActor in
+            for await _ in refreshController.$menuBarShowClaude.values {
+                self.updateStatusItemTitle()
+            }
+        }
+        Task { @MainActor in
+            for await _ in refreshController.$menuBarShowCodex.values {
+                self.updateStatusItemTitle()
+            }
+        }
+        Task { @MainActor in
+            for await _ in refreshController.$menuBarShowCursor.values {
                 self.updateStatusItemTitle()
             }
         }
@@ -50,21 +70,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     private func updateStatusItemTitle() {
         let state = refreshController.state
+        let density = refreshController.menuBarDensity
+
+        if density == .hidden {
+            let worst = worstUsageFraction(in: state)
+            statusItem?.button?.title = ""
+            statusItem?.button?.attributedTitle = headroomIconSegment(warningFraction: worst)
+            return
+        }
+
         let str = NSMutableAttributedString()
 
         var segments: [NSAttributedString] = []
-        if state.claude.isConfigured {
+        if state.claude.isConfigured, refreshController.menuBarShowClaude {
             segments.append(coloredSegment(
                 assetName: "ClaudeLogo",
                 fraction: state.claude.fiveHour?.fraction,
-                weeklyFraction: state.claude.weekly?.fraction
+                weeklyFraction: state.claude.weekly?.fraction,
+                density: density
             ))
         }
-        if state.codex.isConfigured {
+        if state.codex.isConfigured, refreshController.menuBarShowCodex {
             segments.append(coloredSegment(
                 assetName: "OpenAILogo",
                 fraction: state.codex.fiveHour?.fraction,
-                weeklyFraction: state.codex.weekly?.fraction
+                weeklyFraction: state.codex.weekly?.fraction,
+                density: density
+            ))
+        }
+        if state.cursor.isConfigured, refreshController.menuBarShowCursor {
+            segments.append(coloredSegment(
+                assetName: "CursorLogo",
+                fraction: state.cursor.fiveHour?.fraction,
+                weeklyFraction: state.cursor.weekly?.fraction,
+                density: density
             ))
         }
 
@@ -74,8 +113,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        let separator = density == .full ? "  " : " "
         for (i, seg) in segments.enumerated() {
-            if i > 0 { str.append(NSAttributedString(string: "  ")) }
+            if i > 0 { str.append(NSAttributedString(string: separator)) }
             str.append(seg)
         }
         statusItem?.button?.attributedTitle = str
@@ -84,22 +124,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func coloredSegment(
         assetName: String,
         fraction: Double?,
-        weeklyFraction: Double?
+        weeklyFraction: Double?,
+        density: MenuBarDensity
     ) -> NSAttributedString {
-        let pctText: String = fraction.map { "\(Int(($0 * 100).rounded()))%" } ?? "—"
-        let weeklyText: String = weeklyFraction.map { "·\(Int(($0 * 100).rounded()))%" } ?? ""
+        let warningFraction = max(fraction ?? 0, weeklyFraction ?? 0)
+        let displayFraction = fraction ?? weeklyFraction
+
+        let pctText: String = displayFraction.map { "\(Int(($0 * 100).rounded()))%" } ?? "—"
+        let weeklyText: String = {
+            guard density == .full, let weeklyFraction else { return "" }
+            return "·\(Int((weeklyFraction * 100).rounded()))%"
+        }()
 
         let textColor: NSColor = {
-            guard let f = fraction else { return .secondaryLabelColor }
-            if f >= 0.9 { return .systemRed }
-            if f >= 0.7 { return .systemOrange }
+            guard displayFraction != nil || weeklyFraction != nil else { return .secondaryLabelColor }
+            if warningFraction >= 0.9 { return .systemRed }
+            if warningFraction >= 0.7 { return .systemOrange }
             return .labelColor
         }()
-        // Logos stay white by default and only flip to the warning colors.
         let iconColor: NSColor = {
-            guard let f = fraction else { return .secondaryLabelColor }
-            if f >= 0.9 { return .systemRed }
-            if f >= 0.7 { return .systemOrange }
+            guard displayFraction != nil || weeklyFraction != nil else { return .secondaryLabelColor }
+            if warningFraction >= 0.9 { return .systemRed }
+            if warningFraction >= 0.7 { return .systemOrange }
             return .white
         }()
 
@@ -110,11 +156,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let tinted = image.tinted(with: iconColor, size: size)
             let attachment = NSTextAttachment()
             attachment.image = tinted
-            // Lift so the glyph baselines with the percentage text.
             attachment.bounds = CGRect(x: 0, y: -2, width: size.width, height: size.height)
             result.append(NSAttributedString(attachment: attachment))
-            result.append(NSAttributedString(string: " "))
+            if density != .iconsOnly {
+                result.append(NSAttributedString(string: " "))
+            }
         }
+
+        guard density != .iconsOnly else { return result }
 
         let textAttrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.menuBarFont(ofSize: 0),
@@ -122,6 +171,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ]
         result.append(NSAttributedString(string: "\(pctText)\(weeklyText)", attributes: textAttrs))
         return result
+    }
+
+    private func headroomIconSegment(warningFraction: Double?) -> NSAttributedString {
+        let iconColor: NSColor = {
+            guard let f = warningFraction else { return .white }
+            if f >= 0.9 { return .systemRed }
+            if f >= 0.7 { return .systemOrange }
+            return .white
+        }()
+
+        let result = NSMutableAttributedString()
+        if let image = NSImage(named: "HeadroomLogo") {
+            let size = NSSize(width: 14, height: 14)
+            let tinted = image.tinted(with: iconColor, size: size)
+            let attachment = NSTextAttachment()
+            attachment.image = tinted
+            attachment.bounds = CGRect(x: 0, y: -2, width: size.width, height: size.height)
+            result.append(NSAttributedString(attachment: attachment))
+        }
+        return result
+    }
+
+    private func worstUsageFraction(in state: UsageState) -> Double? {
+        var values: [Double] = []
+        for usage in [state.claude, state.codex, state.cursor] where usage.isConfigured {
+            if let fraction = usage.fiveHour?.fraction { values.append(fraction) }
+            if let fraction = usage.weekly?.fraction { values.append(fraction) }
+        }
+        return values.max()
     }
 
     func openSettings() {

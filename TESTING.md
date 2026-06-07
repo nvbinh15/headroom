@@ -11,11 +11,11 @@ Look at the top-right of your screen, near the clock. You should see something
 like:
 
 ```
-C 54%·32%   X 4%·19%
+C 54%·32%   X 4%·19%   Cu 12%·46%
 ```
 
-- `C` = Claude  ·  `X` = Codex
-- First number = 5-hour usage  ·  second = weekly usage
+- `C` = Claude  ·  `X` = Codex  ·  `Cu` = Cursor
+- First number = 5-hour usage (Claude/Codex) or Auto usage (Cursor)  ·  second = weekly (Claude/Codex) or API usage (Cursor)
 - Color shifts orange at ≥ 70 %, red at ≥ 90 %
 
 If the menu bar is crowded, the macOS bar may be hiding it behind the notch —
@@ -36,6 +36,7 @@ Click the menu-bar text. A popover should slide down with:
 - **Claude** card — 5h and Weekly progress bars, plan tier, source label
   (`API`, `API · cached`, or `estimate`)
 - **Codex** card — 5h and Weekly progress bars
+- **Cursor** card — Auto and API progress bars for the current billing cycle
 - A "↻" refresh button (top-right)
 - "Updated <time> ago", `Settings…`, and `Quit` at the bottom
 
@@ -52,7 +53,10 @@ match what the menu-bar shows (within the 5-min cache window).
 For Codex, you can run `codex` and check the indicator at the bottom of the TUI;
 it should also match.
 
-If both providers' numbers match the CLIs, the app is working correctly.
+For Cursor, open **Cursor Settings → Usage** in the IDE and compare the Auto/API
+percentages — they should match Headroom within the 5-min cache window.
+
+If all configured providers' numbers match their native UIs, the app is working correctly.
 
 ---
 

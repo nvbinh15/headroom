@@ -18,7 +18,7 @@ private struct SmallWidgetView: View {
     let state: UsageState
 
     var body: some View {
-        if !state.claude.isConfigured && !state.codex.isConfigured {
+        if !state.claude.isConfigured && !state.codex.isConfigured && !state.cursor.isConfigured {
             EmptyState()
         } else {
             VStack(spacing: 10) {
@@ -29,6 +29,9 @@ private struct SmallWidgetView: View {
                     if state.codex.isConfigured {
                         RingView(label: "X", fraction: state.codex.fiveHour?.fraction)
                     }
+                    if state.cursor.isConfigured {
+                        RingView(label: "Cu", fraction: state.cursor.fiveHour?.fraction)
+                    }
                 }
                 HStack(spacing: 8) {
                     if state.claude.isConfigured {
@@ -36,6 +39,9 @@ private struct SmallWidgetView: View {
                     }
                     if state.codex.isConfigured {
                         MiniBar(label: "X·wk", fraction: state.codex.weekly?.fraction)
+                    }
+                    if state.cursor.isConfigured {
+                        MiniBar(label: "Cu·API", fraction: state.cursor.weekly?.fraction)
                     }
                 }
             }
@@ -48,7 +54,7 @@ private struct EmptyState: View {
     var body: some View {
         VStack(spacing: 4) {
             Text("Headroom").font(.caption.bold())
-            Text("Sign in to Claude Code or Codex CLI")
+            Text("Sign in to Claude Code, Codex CLI, or Cursor")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -61,18 +67,24 @@ private struct MediumWidgetView: View {
     let state: UsageState
 
     var body: some View {
-        if !state.claude.isConfigured && !state.codex.isConfigured {
+        if !state.claude.isConfigured && !state.codex.isConfigured && !state.cursor.isConfigured {
             EmptyState()
         } else {
             VStack(spacing: 8) {
                 if state.claude.isConfigured {
                     ProviderRow(name: "Claude", usage: state.claude)
                 }
-                if state.claude.isConfigured && state.codex.isConfigured {
+                if state.claude.isConfigured && (state.codex.isConfigured || state.cursor.isConfigured) {
                     Divider()
                 }
                 if state.codex.isConfigured {
                     ProviderRow(name: "Codex",  usage: state.codex)
+                }
+                if state.codex.isConfigured && state.cursor.isConfigured {
+                    Divider()
+                }
+                if state.cursor.isConfigured {
+                    ProviderRow(name: "Cursor", usage: state.cursor)
                 }
             }
             .padding(12)
@@ -88,8 +100,12 @@ private struct MediumWidgetView: View {
                 Text(name)
                     .font(.subheadline.bold())
                     .frame(width: 56, alignment: .leading)
-                WindowCell(title: "5h",     window: usage.fiveHour)
-                WindowCell(title: "Weekly", window: usage.weekly)
+                if usage.fiveHour != nil {
+                    WindowCell(title: usage.fiveHourLabel ?? "5h", window: usage.fiveHour)
+                }
+                if usage.weekly != nil {
+                    WindowCell(title: usage.weeklyLabel ?? "Weekly", window: usage.weekly)
+                }
             }
         }
     }

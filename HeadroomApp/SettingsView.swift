@@ -75,6 +75,28 @@ struct SettingsView: View {
             }
 
             Section {
+                Picker("Density", selection: $controller.menuBarDensity) {
+                    ForEach(MenuBarDensity.allCases) { density in
+                        Text(density.label).tag(density)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Toggle("Claude", isOn: $controller.menuBarShowClaude)
+                    .disabled(!controller.state.claude.isConfigured || controller.menuBarDensity == .hidden)
+                Toggle("Codex", isOn: $controller.menuBarShowCodex)
+                    .disabled(!controller.state.codex.isConfigured || controller.menuBarDensity == .hidden)
+                Toggle("Cursor", isOn: $controller.menuBarShowCursor)
+                    .disabled(!controller.state.cursor.isConfigured || controller.menuBarDensity == .hidden)
+            } header: {
+                Text("Menu bar")
+            } footer: {
+                Text(menuBarFooter)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
                 LabeledContent("Refresh every") {
                     HStack(spacing: 8) {
                         Slider(value: $controller.refreshIntervalSeconds, in: 30...600, step: 30)
@@ -122,6 +144,10 @@ struct SettingsView: View {
                     Text(controller.state.codex.note ?? "—")
                         .foregroundStyle(.secondary)
                 }
+                LabeledContent("Cursor") {
+                    Text(controller.state.cursor.note ?? "—")
+                        .foregroundStyle(.secondary)
+                }
                 LabeledContent("Updated") {
                     Text(updatedLabel)
                         .foregroundStyle(.secondary)
@@ -132,27 +158,33 @@ struct SettingsView: View {
 
             Section {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Headroom is not affiliated with Anthropic or OpenAI. It reads the local credentials those tools already store on this machine, then queries each service's usage endpoint to show your remaining budget.")
+                    Text("Headroom is not affiliated with Anthropic, OpenAI, or Cursor. It reads the local credentials those tools already store on this machine, then queries each service's usage endpoint to show your remaining budget.")
 
                     DataFlowGroup(
                         title: "Reads from disk",
                         items: [
                             "~/.codex/auth.json — Codex OAuth bearer + account ID",
                             "~/.codex/sessions/**/*.jsonl — used as a fallback when the API is unreachable",
-                            "~/.claude/projects/**/*.jsonl — used as a fallback when the API is unreachable"
+                            "~/.claude/.credentials.json — Claude OAuth bearer when Claude Code stores it there",
+                            "~/.claude/projects/**/*.jsonl — used as a fallback when the API is unreachable",
+                            "~/Library/Application Support/Cursor/User/globalStorage/state.vscdb — Cursor OAuth bearer"
                         ]
                     )
                     DataFlowGroup(
                         title: "Reads from macOS keychain",
                         items: [
-                            "“Claude Code-credentials” — Claude OAuth bearer written by Claude Code"
+                            "“Claude Code-credentials” — Claude OAuth bearer written by Claude Code",
+                            "“Headroom-ClaudeCredentialsCache” — Headroom's local cache to avoid repeated keychain prompts",
+                            "“cursor-access-token” / “cursor-refresh-token” — Cursor CLI OAuth when present"
                         ]
                     )
                     DataFlowGroup(
                         title: "Sends over the network",
                         items: [
                             "GET api.anthropic.com/api/oauth/usage",
-                            "GET chatgpt.com/backend-api/wham/usage"
+                            "GET chatgpt.com/backend-api/wham/usage",
+                            "POST api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage",
+                            "GET api2.cursor.sh/auth/usage (enterprise fallback)"
                         ],
                         footnote: "Authorized with the bearer tokens above. No telemetry, analytics, or other data leaves your machine."
                     )
@@ -177,7 +209,7 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)  // let the window's glass show through
-        .frame(width: 480, height: 440)
+        .frame(width: 480, height: 520)
     }
 
     private var intervalLabel: String {
@@ -191,5 +223,12 @@ struct SettingsView: View {
         let f = RelativeDateTimeFormatter()
         f.unitsStyle = .short
         return f.localizedString(for: controller.state.lastUpdated, relativeTo: Date())
+    }
+
+    private var menuBarFooter: String {
+        if controller.menuBarDensity == .hidden {
+            return "Shows only the Headroom icon; it turns orange or red when any provider is running low. Click for full usage in the popover."
+        }
+        return "\(controller.menuBarDensity.detail). Choose which signed-in providers appear in the menu bar; the popover always shows full detail for every provider."
     }
 }

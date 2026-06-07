@@ -33,8 +33,13 @@ struct HeadroomCLI {
             renderProvider("Codex", state.codex)
             rendered = true
         }
+        if state.cursor.isConfigured {
+            if rendered { print("") }
+            renderProvider("Cursor", state.cursor)
+            rendered = true
+        }
         if !rendered {
-            print("No providers signed in. Sign in to Claude Code or Codex CLI to see usage here.")
+            print("No providers signed in. Sign in to Claude Code, Codex CLI, or Cursor to see usage here.")
         }
     }
 
@@ -50,17 +55,19 @@ struct HeadroomCLI {
     static func renderProvider(_ name: String, _ usage: ProviderUsage) {
         print("\(name)")
         if let n = usage.note { print("  \(n)") }
+        let primaryLabel = usage.fiveHourLabel ?? "5h"
+        let secondaryLabel = usage.weeklyLabel ?? "weekly"
         if let w = usage.fiveHour {
             let used = w.tokensUsed.map { " (\($0.formatted()) tok)" } ?? ""
-            print("  5h     \(formatPct(w.fraction))\(used)  resets in \(formatReset(w.resetsAt))")
+            print("  \(primaryLabel.padding(toLength: 6, withPad: " ", startingAt: 0)) \(formatPct(w.fraction))\(used)  resets in \(formatReset(w.resetsAt))")
         } else {
-            print("  5h     n/a")
+            print("  \(primaryLabel.padding(toLength: 6, withPad: " ", startingAt: 0)) n/a")
         }
         if let w = usage.weekly {
             let used = w.tokensUsed.map { " (\($0.formatted()) tok)" } ?? ""
-            print("  weekly \(formatPct(w.fraction))\(used)  resets in \(formatReset(w.resetsAt))")
-        } else {
-            print("  weekly n/a")
+            print("  \(secondaryLabel.padding(toLength: 6, withPad: " ", startingAt: 0)) \(formatPct(w.fraction))\(used)  resets in \(formatReset(w.resetsAt))")
+        } else if usage.fiveHour != nil {
+            print("  \(secondaryLabel.padding(toLength: 6, withPad: " ", startingAt: 0)) n/a")
         }
     }
 }

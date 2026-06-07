@@ -1,7 +1,7 @@
-# Headroom — macOS menu-bar app + widget for Claude Code & Codex CLI
+# Headroom — macOS menu-bar app + widget for Claude Code, Codex CLI & Cursor
 
-Shows your remaining 5-hour and weekly rate-limit budget for both Claude Code
-and Codex CLI directly in the macOS menu bar, with a matching desktop widget.
+Shows your remaining rate-limit headroom for Claude Code, Codex CLI, and Cursor
+directly in the macOS menu bar, with a matching desktop widget.
 
 ## Screenshots
 
@@ -20,14 +20,26 @@ signed build of the app (see TESTING.md).
 
 - **Codex** — calls `GET https://chatgpt.com/backend-api/wham/usage` with the
   OAuth bearer + `ChatGPT-Account-Id` headers from `~/.codex/auth.json`. This
-  is the same endpoint the Codex TUI hits on launch. Throttled to once every
-  5 min and disk-cached. Falls back to parsing the `rate_limits` snapshots
-  Codex sessions persist to `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`
-  if the API is unreachable.
+  is the same endpoint the Codex TUI hits on launch. If the auth file includes
+  a refresh token, Headroom refreshes stale access tokens and writes the updated
+  token back to that file. Throttled to once every 5 min and disk-cached. Falls
+  back to parsing the `rate_limits` snapshots Codex sessions persist to
+  `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` if the API is unreachable.
 - **Claude** — calls `GET /api/oauth/usage` with the OAuth token Claude Code
-  stores in your macOS keychain (service: `Claude Code-credentials`). This is
-  the same endpoint the `/usage` slash command uses internally. Throttled to one
-  request per 5 min and cached to disk so a 429 doesn't blank the widget.
+  stores in `~/.claude/.credentials.json` or in your macOS keychain (service:
+  `Claude Code-credentials`). After a successful keychain read, Headroom caches
+  the credential in its own keychain item so timer refreshes don't repeatedly
+  ask macOS for Claude Code keychain access. This is the same endpoint the
+  `/usage` slash command uses internally. Throttled to one request per 5 min
+  and cached to disk so a 429 doesn't blank the widget.
+- **Cursor** — calls `POST api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage`
+  with the OAuth bearer Cursor stores in
+  `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`
+  (key `cursorAuth/accessToken`). Falls back to `GET api2.cursor.sh/auth/usage`
+  for enterprise request-based plans. If the token is expired and a refresh token
+  is present, Headroom refreshes via `POST api2.cursor.sh/oauth/token` and writes
+  the updated token back to the same SQLite store. Throttled to once every 5 min
+  and disk-cached. Shows Auto + API usage percentages for the current billing cycle.
 
 If the OAuth call fails persistently and there's no cached response, falls back
 to a local-jsonl token estimator using your detected plan tier
@@ -70,6 +82,11 @@ Codex
   codex API
   5h      4.0%  resets in 1h09m
   weekly 19.0%  resets in 151h44m
+
+Cursor
+  Ultra · API
+  Auto     12.5%  resets in 128h53m
+  API      46.4%  resets in 128h53m
 ```
 
 ## Project layout
@@ -83,7 +100,9 @@ HeadroomKit/                      # SwiftPM library + CLI
     Readers/CodexUsageReader.swift   # parses ~/.codex/sessions/**/*.jsonl
     Readers/ClaudeUsageReader.swift  # local-jsonl estimator (fallback)
     Readers/KeychainCredentials.swift
+    Readers/CursorCredentials.swift  # reads Cursor IDE SQLite auth
     Network/OAuthUsageClient.swift   # /api/oauth/usage
+    Network/CursorUsageClient.swift  # GetCurrentPeriodUsage
     Refresher.swift                  # ties API + cache + fallback together
   Sources/headroom/              # CLI executable
 HeadroomApp/                      # menu-bar host app

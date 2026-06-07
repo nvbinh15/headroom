@@ -7,8 +7,7 @@ public struct CodexUsageReader: Sendable {
         if let dir = sessionsDir {
             self.sessionsDir = dir
         } else {
-            let home = FileManager.default.homeDirectoryForCurrentUser
-            self.sessionsDir = home.appendingPathComponent(".codex/sessions", isDirectory: true)
+            self.sessionsDir = CodexAuth.codexHome().appendingPathComponent("sessions", isDirectory: true)
         }
     }
 
@@ -29,7 +28,7 @@ public struct CodexUsageReader: Sendable {
                 var fiveHour: WindowUsage?
                 var weekly: WindowUsage?
                 for w in [snapshot.primary, snapshot.secondary].compactMap({ $0 }) {
-                    if w.windowMinutes >= 360 {
+                    if w.windowMinutes >= 6 * 24 * 60 {
                         weekly = w
                     } else {
                         fiveHour = w

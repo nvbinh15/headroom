@@ -153,12 +153,12 @@
 <main>
   <div class="eyebrow">Privacy &amp; Data</div>
   <h1>What Headroom reads, what it sends.</h1>
-  <p class="updated">Last updated: 2026-05-06</p>
+  <p class="updated">Last updated: 2026-05-17</p>
 
-  <p>Headroom is a macOS menu-bar app that displays the rate-limit headroom for Claude Code and the Codex CLI. It is an independent, open-source project and is <strong>not affiliated with Anthropic or OpenAI</strong>.</p>
+  <p>Headroom is a macOS menu-bar app that displays the rate-limit headroom for Claude Code, the Codex CLI, and Cursor. It is an independent, open-source project and is <strong>not affiliated with Anthropic, OpenAI, or Cursor</strong>.</p>
 
   <div class="callout">
-    The summary: Headroom runs entirely on your machine. It reads the local credentials Claude Code and Codex already store on this device, calls each service's own usage endpoint, and displays the result. There is no Headroom-operated server, no analytics, no telemetry, and no third-party data collection.
+    The summary: Headroom runs entirely on your machine. It reads the local credentials Claude Code, Codex, and Cursor already store on this device, calls each service's own usage endpoint, and displays the result. There is no Headroom-operated server, no analytics, no telemetry, and no third-party data collection.
   </div>
 
   <h2>What Headroom reads from your machine</h2>
@@ -166,33 +166,42 @@
   <ul>
     <li><code>~/.codex/auth.json</code> — the OAuth bearer token and ChatGPT account ID written by the Codex CLI when you sign in.</li>
     <li><code>~/.codex/sessions/**/*.jsonl</code> — the rate-limit snapshots Codex persists per session. Used only as a fallback when the live endpoint is unreachable.</li>
+    <li><code>~/.claude/.credentials.json</code> — the OAuth bearer token written by Claude Code on versions that store credentials on disk.</li>
     <li><code>~/.claude/projects/**/*.jsonl</code> — the local conversation logs Claude Code writes per project. Used only as a fallback estimator when the live endpoint is unreachable, and only to count tokens.</li>
+    <li><code>~/Library/Application Support/Cursor/User/globalStorage/state.vscdb</code> — the SQLite database where Cursor IDE stores its OAuth bearer token (<code>cursorAuth/accessToken</code>) and refresh token.</li>
   </ul>
   <p>From the macOS keychain:</p>
   <ul>
     <li>The keychain item with service name <code>Claude Code-credentials</code> — the OAuth bearer token written by Claude Code when you sign in.</li>
+    <li>The keychain item with service name <code>Headroom-ClaudeCredentialsCache</code> — Headroom's local credential cache, used to avoid repeatedly prompting for access to Claude Code's keychain item.</li>
+    <li>The keychain items <code>cursor-access-token</code> and <code>cursor-refresh-token</code> — OAuth tokens written by the Cursor CLI when present.</li>
   </ul>
 
   <h2>What Headroom sends over the network</h2>
-  <p>Two HTTP requests, both to the services that issued the tokens above:</p>
+  <p>HTTP requests to the services that issued the tokens above:</p>
   <ul>
     <li><code>GET https://api.anthropic.com/api/oauth/usage</code> — the same endpoint Claude Code's <code>/usage</code> command calls. Authorized with the Claude bearer token.</li>
     <li><code>GET https://chatgpt.com/backend-api/wham/usage</code> — the same endpoint the Codex CLI calls on launch. Authorized with the Codex bearer token and ChatGPT account ID.</li>
+    <li><code>POST https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage</code> — Cursor's dashboard usage endpoint. Authorized with the Cursor bearer token.</li>
+    <li><code>GET https://api2.cursor.sh/auth/usage</code> — legacy request-based usage for some enterprise plans. Authorized with the Cursor bearer token.</li>
+    <li><code>POST https://api2.cursor.sh/oauth/token</code> — refreshes an expired Cursor access token when a refresh token is available. Headroom writes the new token back to the same local store it was read from.</li>
   </ul>
-  <p>That is the complete list. Headroom does not transmit your tokens, your usage, your machine identifiers, or anything else to any other server. Both requests are throttled internally to once every five minutes and cached on disk so the app can keep working under rate limits.</p>
+  <p>That is the complete list. Headroom does not transmit your tokens, your usage, your machine identifiers, or anything else to any other server. Requests are throttled internally to once every five minutes and cached on disk so the app can keep working under rate limits.</p>
 
   <h2>Where data is stored</h2>
   <ul>
     <li><code>~/Library/Caches/Headroom/</code> — the most recent JSON response from each service, used for fallback when the API is unavailable. Delete it any time via <strong>Settings ▸ Reset caches</strong>.</li>
+    <li>macOS keychain service <code>Headroom-ClaudeCredentialsCache</code> — a local copy of the Claude OAuth credential after Headroom successfully reads it from Claude Code.</li>
     <li><code>~/Library/Application Support/Headroom/state.json</code> — the snapshot the menu bar and widget read from. Contains percentages and reset times, no tokens.</li>
   </ul>
 
   <h2>Third-party terms</h2>
   <p>Anthropic updated its terms in February 2026 to restrict third-party use of Claude subscription OAuth tokens to Anthropic's own products (Claude Code and the Claude.ai web interface). Headroom uses those tokens to display your own usage, on your own machine. Whether that constitutes a permitted use is a question between you and Anthropic; running Headroom is at your discretion.</p>
   <p>OpenAI's terms similarly restrict subscription-credential reuse in third-party software. The same caveat applies.</p>
+  <p>Cursor's usage endpoints are undocumented and may change without notice. Headroom reads the same local credentials and calls the same endpoints other community tools use to display your own usage on your own machine.</p>
 
   <h2>No tracking, no accounts, no analytics</h2>
-  <p>Headroom has no account system, no crash reporter, no analytics SDK, no advertising identifiers, and no third-party network calls beyond the two endpoints listed above. The source code is published in full at <a href="https://github.com/nvbinh15/headroom">github.com/nvbinh15/headroom</a> and you are encouraged to verify these claims against it.</p>
+  <p>Headroom has no account system, no crash reporter, no analytics SDK, no advertising identifiers, and no third-party network calls beyond the endpoints listed above. The source code is published in full at <a href="https://github.com/nvbinh15/headroom">github.com/nvbinh15/headroom</a> and you are encouraged to verify these claims against it.</p>
 
   <h2>Contact</h2>
   <p>Open an issue at <a href="https://github.com/nvbinh15/headroom/issues">github.com/nvbinh15/headroom/issues</a>.</p>

@@ -60,8 +60,8 @@ public actor Refresher {
     // MARK: - Claude
 
     private func readClaude() async -> ProviderUsage {
-        let creds = KeychainCredentialsLoader.loadClaude()
-        let plan = creds?.plan ?? .unknown
+        var creds = KeychainCredentialsLoader.loadClaude()
+        var plan = creds?.plan ?? .unknown
 
         if let token = creds?.accessToken {
             if let cached: CachedClaudeResponse = readCache(at: configuration.claudeCacheURL),
@@ -73,6 +73,18 @@ public actor Refresher {
                 writeCache(CachedClaudeResponse(fetchedAt: Date(), response: response), at: configuration.claudeCacheURL)
                 return claudeProviderUsage(from: response, plan: plan, source: "API")
             case .failure(let err):
+                if shouldRefreshClaudeAfterFailure(err),
+                   let refreshed = KeychainCredentialsLoader.reloadClaudeFromKeychain() {
+                    creds = refreshed
+                    plan = refreshed.plan
+                    switch await claudeClient.fetch(token: refreshed.accessToken) {
+                    case .success(let response):
+                        writeCache(CachedClaudeResponse(fetchedAt: Date(), response: response), at: configuration.claudeCacheURL)
+                        return claudeProviderUsage(from: response, plan: plan, source: "API · refreshed")
+                    case .failure:
+                        break
+                    }
+                }
                 if let cached: CachedClaudeResponse = readCache(at: configuration.claudeCacheURL) {
                     let age = Int(Date().timeIntervalSince(cached.fetchedAt) / 60)
                     return claudeProviderUsage(from: cached.response, plan: plan, source: "API · stale \(age)m (\(describeClaude(err)))")
@@ -101,6 +113,15 @@ public actor Refresher {
         case .http(let code): return "HTTP \(code)"
         case .decode: return "decode error"
         case .network: return "network error"
+        }
+    }
+
+    private func shouldRefreshClaudeAfterFailure(_ err: OAuthUsageClient.FetchError) -> Bool {
+        switch err {
+        case .http(let code):
+            return code == 401 || code == 403
+        case .decode(_), .network(_):
+            return false
         }
     }
 

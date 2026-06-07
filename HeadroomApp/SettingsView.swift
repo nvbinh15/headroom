@@ -167,14 +167,14 @@ struct SettingsView: View {
                             "~/.codex/sessions/**/*.jsonl — used as a fallback when the API is unreachable",
                             "~/.claude/.credentials.json — Claude OAuth bearer when Claude Code stores it there",
                             "~/.claude/projects/**/*.jsonl — used as a fallback when the API is unreachable",
-                            "~/Library/Application Support/Cursor/User/globalStorage/state.vscdb — Cursor OAuth bearer"
+                            "~/Library/Application Support/Cursor/User/globalStorage/state.vscdb — Cursor OAuth bearer",
+                            "~/Library/Application Support/Headroom/claude-credentials.json — Headroom's local Claude OAuth copy after the first successful read"
                         ]
                     )
                     DataFlowGroup(
                         title: "Reads from macOS keychain",
                         items: [
-                            "“Claude Code-credentials” — Claude OAuth bearer written by Claude Code",
-                            "“Headroom-ClaudeCredentialsCache” — Headroom's local cache to avoid repeated keychain prompts",
+                            "“Claude Code-credentials” — Claude OAuth bearer written by Claude Code (read once, then cached on disk)",
                             "“cursor-access-token” / “cursor-refresh-token” — Cursor CLI OAuth when present"
                         ]
                     )

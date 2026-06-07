@@ -169,11 +169,11 @@
     <li><code>~/.claude/.credentials.json</code> — the OAuth bearer token written by Claude Code on versions that store credentials on disk.</li>
     <li><code>~/.claude/projects/**/*.jsonl</code> — the local conversation logs Claude Code writes per project. Used only as a fallback estimator when the live endpoint is unreachable, and only to count tokens.</li>
     <li><code>~/Library/Application Support/Cursor/User/globalStorage/state.vscdb</code> — the SQLite database where Cursor IDE stores its OAuth bearer token (<code>cursorAuth/accessToken</code>) and refresh token.</li>
+    <li><code>~/Library/Application Support/Headroom/claude-credentials.json</code> — Headroom's local copy of the Claude OAuth blob. Written after the first successful read so timer refreshes don't repeatedly ask macOS for Claude Code keychain access.</li>
   </ul>
   <p>From the macOS keychain:</p>
   <ul>
-    <li>The keychain item with service name <code>Claude Code-credentials</code> — the OAuth bearer token written by Claude Code when you sign in.</li>
-    <li>The keychain item with service name <code>Headroom-ClaudeCredentialsCache</code> — Headroom's local credential cache, used to avoid repeatedly prompting for access to Claude Code's keychain item.</li>
+    <li>The keychain item with service name <code>Claude Code-credentials</code> — the OAuth bearer token written by Claude Code when you sign in. Headroom reads this at most once (or again after an API 401), then caches it to the file above.</li>
     <li>The keychain items <code>cursor-access-token</code> and <code>cursor-refresh-token</code> — OAuth tokens written by the Cursor CLI when present.</li>
   </ul>
 
@@ -191,7 +191,7 @@
   <h2>Where data is stored</h2>
   <ul>
     <li><code>~/Library/Caches/Headroom/</code> — the most recent JSON response from each service, used for fallback when the API is unavailable. Delete it any time via <strong>Settings ▸ Reset caches</strong>.</li>
-    <li>macOS keychain service <code>Headroom-ClaudeCredentialsCache</code> — a local copy of the Claude OAuth credential after Headroom successfully reads it from Claude Code.</li>
+    <li>macOS keychain service <code>Headroom-ClaudeCredentialsCache</code> — legacy local copy; newer builds prefer <code>claude-credentials.json</code> instead.</li>
     <li><code>~/Library/Application Support/Headroom/state.json</code> — the snapshot the menu bar and widget read from. Contains percentages and reset times, no tokens.</li>
   </ul>
 

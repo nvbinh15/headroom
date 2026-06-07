@@ -23,50 +23,63 @@ public enum KeychainCredentialsLoader {
     private static let claudeService = "Claude Code-credentials"
     private static let cacheService = "Headroom-ClaudeCredentialsCache"
     private static let cacheAccount = "Claude Code OAuth"
+    private static let credentialsFileName = "claude-credentials.json"
     private static let deniedUntilKey = "HeadroomClaudeKeychainDeniedUntil"
     private static let denialCooldown: TimeInterval = 6 * 60 * 60
-    private static let memoryTTL: TimeInterval = 30 * 60
 
     private static let memoryLock = NSLock()
     private nonisolated(unsafe) static var memoryCredentials: ClaudeCredentials?
-    private nonisolated(unsafe) static var memoryStoredAt: Date?
 
-    /// Reads the OAuth blob Claude Code writes to the macOS keychain under
-    /// service "Claude Code-credentials". Returns nil if not present (e.g.
-    /// when running in a sandbox without keychain access, or a fresh login
-    /// hasn't happened yet).
+    /// Override in tests to redirect the Headroom credential cache file.
+    static var headroomCredentialsFileURLOverride: URL?
+
+    /// Reads Claude OAuth credentials without repeatedly prompting for Claude Code's
+    /// keychain item. A copy is kept in memory for the process lifetime and on disk
+    /// at ~/Library/Application Support/Headroom/claude-credentials.json after the
+    /// first successful read.
     public static func loadClaude(now: Date = Date()) -> ClaudeCredentials? {
-        if let cached = readMemoryCache(now: now) {
+        if let cached = readMemoryCache() {
             return cached
         }
 
+        if let data = readHeadroomCredentialsFile(),
+           let credentials = parseClaudeCredentials(data: data) {
+            writeMemoryCache(credentials)
+            return credentials
+        }
+
         if let data = readAppKeychainCache(),
-           let cached = parseClaudeCredentials(data: data) {
-            writeMemoryCache(cached, now: now)
-            return cached
+           let credentials = parseClaudeCredentials(data: data) {
+            persist(credentials: credentials, rawData: data)
+            return credentials
         }
 
         if let data = readClaudeCredentialsFile(),
            let credentials = parseClaudeCredentials(data: data) {
-            cache(credentials: credentials, data: data, now: now)
+            persist(credentials: credentials, rawData: data)
             return credentials
         }
 
         guard canAttemptClaudeKeychain(now: now) else { return nil }
 
-        if let data = readClaudeKeychainWithSecurityCLI(),
-           let credentials = parseClaudeCredentials(data: data) {
-            cache(credentials: credentials, data: data, now: now)
-            return credentials
-        }
-
         if let data = readClaudeKeychainWithSecurityFramework(now: now),
            let credentials = parseClaudeCredentials(data: data) {
-            cache(credentials: credentials, data: data, now: now)
+            persist(credentials: credentials, rawData: data)
             return credentials
         }
 
         return nil
+    }
+
+    /// Re-read Claude Code's keychain item and refresh the on-disk cache. Intended
+    /// for use after the API rejects an expired token, not on every refresh tick.
+    public static func reloadClaudeFromKeychain(now: Date = Date()) -> ClaudeCredentials? {
+        guard canAttemptClaudeKeychain(now: now) else { return nil }
+        guard let data = readClaudeKeychainWithSecurityFramework(now: now),
+              let credentials = parseClaudeCredentials(data: data)
+        else { return nil }
+        persist(credentials: credentials, rawData: data)
+        return credentials
     }
 
     static func parseClaudeCredentials(data: Data) -> ClaudeCredentials? {
@@ -97,27 +110,51 @@ public enum KeychainCredentialsLoader {
         )
     }
 
-    private static func cache(credentials: ClaudeCredentials, data: Data, now: Date) {
-        writeMemoryCache(credentials, now: now)
-        writeAppKeychainCache(data)
+    static func headroomCredentialsFileURL(
+        fileManager: FileManager = .default
+    ) -> URL {
+        if let override = headroomCredentialsFileURLOverride {
+            return override
+        }
+        let support = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let dir = support.appendingPathComponent("Headroom", isDirectory: true)
+        try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent(credentialsFileName)
     }
 
-    private static func readMemoryCache(now: Date) -> ClaudeCredentials? {
+    private static func persist(credentials: ClaudeCredentials, rawData: Data) {
+        writeMemoryCache(credentials)
+        writeHeadroomCredentialsFile(rawData)
+    }
+
+    private static func readMemoryCache() -> ClaudeCredentials? {
         memoryLock.lock()
         defer { memoryLock.unlock() }
-        guard let credentials = memoryCredentials,
-              let storedAt = memoryStoredAt,
-              now.timeIntervalSince(storedAt) < memoryTTL,
-              !credentials.isExpired(now: now)
-        else { return nil }
-        return credentials
+        return memoryCredentials
     }
 
-    private static func writeMemoryCache(_ credentials: ClaudeCredentials, now: Date) {
+    private static func writeMemoryCache(_ credentials: ClaudeCredentials) {
         memoryLock.lock()
         memoryCredentials = credentials
-        memoryStoredAt = now
         memoryLock.unlock()
+    }
+
+    private static func readHeadroomCredentialsFile(
+        fileManager: FileManager = .default
+    ) -> Data? {
+        let url = headroomCredentialsFileURL(fileManager: fileManager)
+        return try? Data(contentsOf: url)
+    }
+
+    private static func writeHeadroomCredentialsFile(_ data: Data) {
+        let url = headroomCredentialsFileURL()
+        let dir = url.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? data.write(to: url, options: .atomic)
+        try? FileManager.default.setAttributes(
+            [.posixPermissions: NSNumber(value: Int16(0o600))],
+            ofItemAtPath: url.path
+        )
     }
 
     private static func readClaudeCredentialsFile() -> Data? {
@@ -137,63 +174,12 @@ public enum KeychainCredentialsLoader {
         return result as? Data
     }
 
-    private static func writeAppKeychainCache(_ data: Data) {
-        let query = appCacheIdentityQuery()
-        let update: [String: Any] = [
-            kSecValueData as String: data
-        ]
-        let status = SecItemUpdate(query as CFDictionary, update as CFDictionary)
-        if status == errSecSuccess { return }
-
-        var add = query
-        add[kSecValueData as String] = data
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-        _ = SecItemAdd(add as CFDictionary, nil)
-    }
-
     private static func appCacheIdentityQuery() -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: cacheService,
             kSecAttrAccount as String: cacheAccount
         ]
-    }
-
-    private static func readClaudeKeychainWithSecurityCLI(timeout: TimeInterval = 1.5) -> Data? {
-        let security = "/usr/bin/security"
-        guard FileManager.default.isExecutableFile(atPath: security) else { return nil }
-
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: security)
-        process.arguments = ["find-generic-password", "-s", claudeService, "-w"]
-
-        let stdout = Pipe()
-        process.standardOutput = stdout
-        process.standardError = Pipe()
-        process.standardInput = nil
-
-        do {
-            try process.run()
-        } catch {
-            return nil
-        }
-
-        let deadline = Date().addingTimeInterval(timeout)
-        while process.isRunning, Date() < deadline {
-            Thread.sleep(forTimeInterval: 0.02)
-        }
-
-        guard !process.isRunning else {
-            process.terminate()
-            return nil
-        }
-        guard process.terminationStatus == 0 else { return nil }
-
-        var data = stdout.fileHandleForReading.readDataToEndOfFile()
-        while let last = data.last, last == 0x0A || last == 0x0D {
-            data.removeLast()
-        }
-        return data.isEmpty ? nil : data
     }
 
     private static func readClaudeKeychainWithSecurityFramework(now: Date) -> Data? {

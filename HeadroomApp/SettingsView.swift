@@ -86,13 +86,13 @@ struct SettingsView: View {
                 }
 
                 Toggle("Claude", isOn: $controller.menuBarShowClaude)
-                    .disabled(!controller.state.claude.isConfigured || controller.menuBarDensity == .hidden)
+                    .disabled(!controller.state.claude.isConfigured)
                 Toggle("Codex", isOn: $controller.menuBarShowCodex)
-                    .disabled(!controller.state.codex.isConfigured || controller.menuBarDensity == .hidden)
+                    .disabled(!controller.state.codex.isConfigured)
                 Toggle("Cursor", isOn: $controller.menuBarShowCursor)
-                    .disabled(!controller.state.cursor.isConfigured || controller.menuBarDensity == .hidden)
+                    .disabled(!controller.state.cursor.isConfigured)
             } header: {
-                Text("Menu bar")
+                Text("Providers")
             } footer: {
                 Text(menuBarFooter)
                     .font(.caption)
@@ -248,8 +248,8 @@ struct SettingsView: View {
 
     private var menuBarFooter: String {
         if controller.menuBarDensity == .hidden {
-            return "Shows only the Headroom icon; it turns orange or red when any provider is running low. Click for full usage in the popover."
+            return "Shows only the Headroom icon; it turns orange or red when a visible provider is running low. Provider toggles also apply to the popover, widget, and warnings."
         }
-        return "\(controller.menuBarDensity.detail). Choose which signed-in providers appear in the menu bar; the popover always shows full detail for every provider."
+        return "\(controller.menuBarDensity.detail). Choose which signed-in providers appear in Headroom."
     }
 }

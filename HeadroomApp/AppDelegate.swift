@@ -74,7 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor
     private func updateStatusItemTitle() {
-        let state = refreshController.state
+        let state = refreshController.visibleState()
         let density = refreshController.menuBarDensity
         let fractionStyle: UsageFractionStyle = state.showRemainingPercent ? .remaining : .used
 
@@ -90,7 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let str = NSMutableAttributedString()
 
         var segments: [NSAttributedString] = []
-        if state.claude.isConfigured, refreshController.menuBarShowClaude {
+        if state.claude.isConfigured {
             segments.append(coloredSegment(
                 assetName: "ClaudeLogo",
                 fraction: state.claude.fiveHour?.fraction,
@@ -99,7 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 style: fractionStyle
             ))
         }
-        if state.codex.isConfigured, refreshController.menuBarShowCodex {
+        if state.codex.isConfigured {
             segments.append(coloredSegment(
                 assetName: "OpenAILogo",
                 fraction: state.codex.fiveHour?.fraction,
@@ -108,7 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 style: fractionStyle
             ))
         }
-        if state.cursor.isConfigured, refreshController.menuBarShowCursor {
+        if state.cursor.isConfigured {
             segments.append(coloredSegment(
                 assetName: "CursorLogo",
                 fraction: state.cursor.fiveHour?.fraction,

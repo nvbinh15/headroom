@@ -18,13 +18,22 @@ final class RefreshController: ObservableObject {
         didSet { MenuBarPreferences.save(density: menuBarDensity) }
     }
     @Published var menuBarShowClaude: Bool {
-        didSet { MenuBarPreferences.save(showClaude: menuBarShowClaude) }
+        didSet {
+            MenuBarPreferences.save(showClaude: menuBarShowClaude)
+            providerVisibilityChanged()
+        }
     }
     @Published var menuBarShowCodex: Bool {
-        didSet { MenuBarPreferences.save(showCodex: menuBarShowCodex) }
+        didSet {
+            MenuBarPreferences.save(showCodex: menuBarShowCodex)
+            providerVisibilityChanged()
+        }
     }
     @Published var menuBarShowCursor: Bool {
-        didSet { MenuBarPreferences.save(showCursor: menuBarShowCursor) }
+        didSet {
+            MenuBarPreferences.save(showCursor: menuBarShowCursor)
+            providerVisibilityChanged()
+        }
     }
     @Published var showRemainingPercent: Bool {
         didSet { DisplayPreferences.save(showRemainingPercent: showRemainingPercent) }
@@ -83,13 +92,17 @@ final class RefreshController: ObservableObject {
         applyDefaultDensityIfNeeded(state: next)
         self.state = next
         writeState(next)
-        UsageNotifier.shared.evaluate(state: next, enabled: lowHeadroomWarnings)
+        UsageNotifier.shared.evaluate(state: visibleState(from: next), enabled: lowHeadroomWarnings)
         WidgetCenter.shared.reloadAllTimelines()
     }
 
     private func applyDefaultDensityIfNeeded(state: UsageState) {
         guard !DisplayPreferences.isDensityExplicitlySet() else { return }
-        let configuredCount = [state.claude, state.codex, state.cursor].filter(\.isConfigured).count
+        let configuredCount = [
+            menuBarShowClaude ? state.claude : nil,
+            menuBarShowCodex ? state.codex : nil,
+            menuBarShowCursor ? state.cursor : nil
+        ].compactMap { $0 }.filter(\.isConfigured).count
         if configuredCount >= 3, menuBarDensity != .hidden {
             menuBarDensity = .hidden
         }
@@ -98,8 +111,25 @@ final class RefreshController: ObservableObject {
     private func writeState(_ state: UsageState) {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        guard let data = try? encoder.encode(state) else { return }
+        guard let data = try? encoder.encode(visibleState(from: state)) else { return }
         try? data.write(to: stateURL, options: .atomic)
+    }
+
+    func visibleState(from state: UsageState? = nil) -> UsageState {
+        let source = state ?? self.state
+        return UsageState(
+            claude: menuBarShowClaude ? source.claude : ProviderUsage(isConfigured: false),
+            codex: menuBarShowCodex ? source.codex : ProviderUsage(isConfigured: false),
+            cursor: menuBarShowCursor ? source.cursor : ProviderUsage(isConfigured: false),
+            showRemainingPercent: source.showRemainingPercent,
+            lastUpdated: source.lastUpdated
+        )
+    }
+
+    private func providerVisibilityChanged() {
+        writeState(state)
+        UsageNotifier.shared.evaluate(state: visibleState(), enabled: lowHeadroomWarnings)
+        WidgetCenter.shared.reloadAllTimelines()
     }
 
     // MARK: - Settings actions

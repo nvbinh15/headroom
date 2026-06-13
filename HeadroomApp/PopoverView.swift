@@ -36,6 +36,10 @@ struct PopoverView: View {
         controller.state.showRemainingPercent ? .remaining : .used
     }
 
+    private var visibleState: UsageState {
+        controller.visibleState()
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
@@ -54,19 +58,23 @@ struct PopoverView: View {
                 .help("Refresh now")
             }
 
-            if controller.state.claude.isConfigured {
-                ProviderRow(name: "Claude", usage: controller.state.claude, fractionStyle: fractionStyle)
+            if visibleState.claude.isConfigured {
+                ProviderRow(name: "Claude", usage: visibleState.claude, fractionStyle: fractionStyle)
             }
-            if controller.state.codex.isConfigured {
-                ProviderRow(name: "Codex", usage: controller.state.codex, fractionStyle: fractionStyle)
+            if visibleState.codex.isConfigured {
+                ProviderRow(name: "Codex", usage: visibleState.codex, fractionStyle: fractionStyle)
             }
-            if controller.state.cursor.isConfigured {
-                ProviderRow(name: "Cursor", usage: controller.state.cursor, fractionStyle: fractionStyle)
+            if visibleState.cursor.isConfigured {
+                ProviderRow(name: "Cursor", usage: visibleState.cursor, fractionStyle: fractionStyle)
             }
-            if !controller.state.claude.isConfigured
-                && !controller.state.codex.isConfigured
-                && !controller.state.cursor.isConfigured {
-                EmptyStateView()
+            if !visibleState.claude.isConfigured
+                && !visibleState.codex.isConfigured
+                && !visibleState.cursor.isConfigured {
+                if hasConfiguredProvider {
+                    HiddenProvidersView()
+                } else {
+                    EmptyStateView()
+                }
             } else {
                 missingProviderHints
             }
@@ -90,6 +98,12 @@ struct PopoverView: View {
         }
         .padding(16)
         .frame(width: 320)
+    }
+
+    private var hasConfiguredProvider: Bool {
+        controller.state.claude.isConfigured
+            || controller.state.codex.isConfigured
+            || controller.state.cursor.isConfigured
     }
 
     @ViewBuilder
@@ -140,6 +154,22 @@ struct EmptyStateView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Text("Cursor — \(UsageDisplay.providerSignInHint(name: "Cursor"))")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(8)
+        .background(.quaternary.opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+struct HiddenProvidersView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("No providers visible")
+                .font(.subheadline.bold())
+            Text("Enable a provider in Settings to show usage here.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

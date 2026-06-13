@@ -35,11 +35,8 @@ final class UsageNotifier {
 
         for (label, window) in windows {
             guard let fraction = window?.fraction else { continue }
-            let thresholds: [(Int, String)] = [
-                (90, "critical"),
-                (70, "warning")
-            ]
-            for (threshold, level) in thresholds {
+            let thresholds = [90, 70]
+            for threshold in thresholds {
                 let key = "\(name)-\(label)-\(threshold)"
                 if fraction >= Double(threshold) / 100.0 {
                     if !alertedKeys.contains(key) {

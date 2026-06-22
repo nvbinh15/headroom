@@ -41,6 +41,8 @@ struct PopoverView: View {
     }
 
     var body: some View {
+        let visible = visibleState
+        let style = fractionStyle
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Text("Headroom")
@@ -58,18 +60,18 @@ struct PopoverView: View {
                 .help("Refresh now")
             }
 
-            if visibleState.claude.isConfigured {
-                ProviderRow(name: "Claude", usage: visibleState.claude, fractionStyle: fractionStyle)
+            if visible.claude.isConfigured {
+                ProviderRow(name: "Claude", usage: visible.claude, fractionStyle: style)
             }
-            if visibleState.codex.isConfigured {
-                ProviderRow(name: "Codex", usage: visibleState.codex, fractionStyle: fractionStyle)
+            if visible.codex.isConfigured {
+                ProviderRow(name: "Codex", usage: visible.codex, fractionStyle: style)
             }
-            if visibleState.cursor.isConfigured {
-                ProviderRow(name: "Cursor", usage: visibleState.cursor, fractionStyle: fractionStyle)
+            if visible.cursor.isConfigured {
+                ProviderRow(name: "Cursor", usage: visible.cursor, fractionStyle: style)
             }
-            if !visibleState.claude.isConfigured
-                && !visibleState.codex.isConfigured
-                && !visibleState.cursor.isConfigured {
+            if !visible.claude.isConfigured
+                && !visible.codex.isConfigured
+                && !visible.cursor.isConfigured {
                 if hasConfiguredProvider {
                     HiddenProvidersView()
                 } else {

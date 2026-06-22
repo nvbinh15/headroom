@@ -1,6 +1,22 @@
 import AppKit
+import Combine
 import SwiftUI
 import HeadroomKit
+
+/// The fixed set of colours a menu-bar glyph can take, keyed so tinted images
+/// can be cached instead of re-rendered offscreen on every refresh tick.
+private enum IconTint: String {
+    case normal, warning, critical, muted
+
+    var color: NSColor {
+        switch self {
+        case .normal: return .white
+        case .warning: return .systemOrange
+        case .critical: return .systemRed
+        case .muted: return .secondaryLabelColor
+        }
+    }
+}
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -9,8 +25,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let refreshController = RefreshController()
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
-    private var stateObserver: NSKeyValueObservation?
     private var settingsWindowController: SettingsWindowController?
+    private var cancellables: Set<AnyCancellable> = []
+    private var statusUpdateScheduled = false
+    /// Cache of recoloured menu-bar glyphs, keyed by asset + tint + appearance.
+    private var tintedImageCache: [String: NSImage] = [:]
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Bail out if another Headroom (same bundle ID) is already running —
@@ -37,39 +56,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .environmentObject(refreshController)
         )
 
-        // Re-render the status item when usage or menu-bar prefs change.
-        Task { @MainActor in
-            for await _ in refreshController.$state.values {
-                self.updateStatusItemTitle()
-            }
-        }
-        Task { @MainActor in
-            for await _ in refreshController.$menuBarDensity.values {
-                self.updateStatusItemTitle()
-            }
-        }
-        Task { @MainActor in
-            for await _ in refreshController.$menuBarShowClaude.values {
-                self.updateStatusItemTitle()
-            }
-        }
-        Task { @MainActor in
-            for await _ in refreshController.$menuBarShowCodex.values {
-                self.updateStatusItemTitle()
-            }
-        }
-        Task { @MainActor in
-            for await _ in refreshController.$menuBarShowCursor.values {
-                self.updateStatusItemTitle()
-            }
-        }
-        Task { @MainActor in
-            for await _ in refreshController.$showRemainingPercent.values {
-                self.updateStatusItemTitle()
-            }
-        }
+        // Re-render the status item when usage or menu-bar prefs change. A
+        // single objectWillChange subscription covers every @Published property;
+        // updates are coalesced so several changes in one runloop turn (e.g. a
+        // refresh touching multiple fields) trigger just one redraw.
+        refreshController.objectWillChange
+            .sink { [weak self] in self?.scheduleStatusItemUpdate() }
+            .store(in: &cancellables)
+        updateStatusItemTitle()
 
         refreshController.start()
+    }
+
+    /// Coalesces status-item redraws to one per runloop turn. objectWillChange
+    /// fires in `willSet`, so the deferred task also guarantees we read the
+    /// already-updated property values.
+    private func scheduleStatusItemUpdate() {
+        guard !statusUpdateScheduled else { return }
+        statusUpdateScheduled = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.statusUpdateScheduled = false
+            self.updateStatusItemTitle()
+        }
     }
 
     @MainActor
@@ -154,21 +163,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if warningFraction >= 0.7 { return .systemOrange }
             return .labelColor
         }()
-        let iconColor: NSColor = {
-            guard displayFraction != nil || weeklyFraction != nil else { return .secondaryLabelColor }
-            if warningFraction >= 0.9 { return .systemRed }
-            if warningFraction >= 0.7 { return .systemOrange }
-            return .white
+        let iconTint: IconTint = {
+            guard displayFraction != nil || weeklyFraction != nil else { return .muted }
+            if warningFraction >= 0.9 { return .critical }
+            if warningFraction >= 0.7 { return .warning }
+            return .normal
         }()
 
         let result = NSMutableAttributedString()
 
-        if let image = NSImage(named: assetName) {
-            let size = NSSize(width: 14, height: 14)
-            let tinted = image.tinted(with: iconColor, size: size)
+        if let tinted = tintedMenuBarImage(named: assetName, tint: iconTint) {
             let attachment = NSTextAttachment()
             attachment.image = tinted
-            attachment.bounds = CGRect(x: 0, y: -2, width: size.width, height: size.height)
+            attachment.bounds = CGRect(x: 0, y: -2, width: tinted.size.width, height: tinted.size.height)
             result.append(NSAttributedString(attachment: attachment))
             if density != .iconsOnly {
                 result.append(NSAttributedString(string: " "))
@@ -186,23 +193,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func headroomIconSegment(warningFraction: Double?) -> NSAttributedString {
-        let iconColor: NSColor = {
-            guard let f = warningFraction else { return .white }
-            if f >= 0.9 { return .systemRed }
-            if f >= 0.7 { return .systemOrange }
-            return .white
+        let iconTint: IconTint = {
+            guard let f = warningFraction else { return .normal }
+            if f >= 0.9 { return .critical }
+            if f >= 0.7 { return .warning }
+            return .normal
         }()
 
         let result = NSMutableAttributedString()
-        if let image = NSImage(named: "HeadroomLogo") {
-            let size = NSSize(width: 14, height: 14)
-            let tinted = image.tinted(with: iconColor, size: size)
+        if let tinted = tintedMenuBarImage(named: "HeadroomLogo", tint: iconTint) {
             let attachment = NSTextAttachment()
             attachment.image = tinted
-            attachment.bounds = CGRect(x: 0, y: -2, width: size.width, height: size.height)
+            attachment.bounds = CGRect(x: 0, y: -2, width: tinted.size.width, height: tinted.size.height)
             result.append(NSAttributedString(attachment: attachment))
         }
         return result
+    }
+
+    /// Returns the menu-bar glyph for `assetName` recoloured for `tint`, drawing
+    /// it offscreen only once per (asset, tint, appearance) combination. Without
+    /// this the icons were re-tinted on every refresh tick and preference change.
+    private func tintedMenuBarImage(named assetName: String, tint: IconTint) -> NSImage? {
+        let appearance = statusItem?.button?.effectiveAppearance.name.rawValue ?? "default"
+        let key = "\(assetName)|\(tint.rawValue)|\(appearance)"
+        if let cached = tintedImageCache[key] { return cached }
+        guard let image = NSImage(named: assetName) else { return nil }
+        let tinted = image.tinted(with: tint.color, size: NSSize(width: 14, height: 14))
+        tintedImageCache[key] = tinted
+        return tinted
     }
 
     private func worstUsageFraction(in state: UsageState) -> Double? {

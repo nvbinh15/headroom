@@ -77,8 +77,12 @@ public actor Refresher {
             plan = refreshed.plan
         }
 
+        // Read the on-disk cache once and reuse it for both the freshness check
+        // and the stale fallback below.
+        let cached: CachedClaudeResponse? = readCache(at: configuration.claudeCacheURL)
+
         if let token = creds?.accessToken {
-            if let cached: CachedClaudeResponse = readCache(at: configuration.claudeCacheURL),
+            if let cached,
                Date().timeIntervalSince(cached.fetchedAt) < configuration.minOAuthInterval {
                 return claudeProviderUsage(
                     from: cached.response,
@@ -107,7 +111,7 @@ public actor Refresher {
                         }
                     }
                 }
-                if let cached: CachedClaudeResponse = readCache(at: configuration.claudeCacheURL) {
+                if let cached {
                     let age = Int(Date().timeIntervalSince(cached.fetchedAt) / 60)
                     return claudeProviderUsage(
                         from: cached.response,
@@ -126,7 +130,7 @@ public actor Refresher {
             }
         }
         // Token unreadable, but a prior API response may still be on disk.
-        if let cached: CachedClaudeResponse = readCache(at: configuration.claudeCacheURL) {
+        if let cached {
             let age = Int(Date().timeIntervalSince(cached.fetchedAt) / 60)
             return claudeProviderUsage(
                 from: cached.response,
@@ -234,14 +238,19 @@ public actor Refresher {
     // MARK: - Codex
 
     private func readCodex() async -> ProviderUsage {
+        // Read the on-disk cache once and reuse it for the freshness check and
+        // the stale fallback below.
+        let cached: CachedCodexResponse? = readCache(at: configuration.codexCacheURL)
+
         if var auth = CodexAuth.loadDefault() {
             let planLabel = auth.planType.map { "Codex \($0)" } ?? "Codex"
-            if let cached: CachedCodexResponse = readCache(at: configuration.codexCacheURL),
+
+            if let cached,
                Date().timeIntervalSince(cached.fetchedAt) < configuration.minOAuthInterval {
                 return codexProviderUsage(
                     from: cached.response,
                     fetchedAt: cached.fetchedAt,
-                    planLabel: planLabel,
+                    planLabel: cached.planLabel ?? planLabel,
                     freshness: .cached,
                     detailNote: nil
                 )
@@ -255,7 +264,7 @@ public actor Refresher {
             switch await codexClient.fetch(auth: auth) {
             case .success(let response):
                 let now = Date()
-                writeCache(CachedCodexResponse(fetchedAt: now, response: response), at: configuration.codexCacheURL)
+                writeCache(CachedCodexResponse(fetchedAt: now, response: response, planLabel: planLabel), at: configuration.codexCacheURL)
                 return codexProviderUsage(from: response, fetchedAt: now, planLabel: planLabel, freshness: .live, detailNote: nil)
             case .failure(let err):
                 if shouldRefreshAfterCodexFailure(err),
@@ -264,18 +273,18 @@ public actor Refresher {
                     switch await codexClient.fetch(auth: refreshed) {
                     case .success(let response):
                         let now = Date()
-                        writeCache(CachedCodexResponse(fetchedAt: now, response: response), at: configuration.codexCacheURL)
+                        writeCache(CachedCodexResponse(fetchedAt: now, response: response, planLabel: planLabel), at: configuration.codexCacheURL)
                         return codexProviderUsage(from: response, fetchedAt: now, planLabel: planLabel, freshness: .live, detailNote: "token refreshed")
                     case .failure:
                         break
                     }
                 }
-                if let cached: CachedCodexResponse = readCache(at: configuration.codexCacheURL) {
+                if let cached {
                     let age = Int(Date().timeIntervalSince(cached.fetchedAt) / 60)
                     return codexProviderUsage(
                         from: cached.response,
                         fetchedAt: cached.fetchedAt,
-                        planLabel: planLabel,
+                        planLabel: cached.planLabel ?? planLabel,
                         freshness: .stale,
                         staleAgeMinutes: age,
                         detailNote: describeCodex(err)
@@ -392,14 +401,15 @@ public actor Refresher {
     // MARK: - Cursor
 
     private func readCursor() async -> ProviderUsage {
+        // Read the on-disk cache once and reuse it for the freshness check and
+        // the stale fallback below.
+        let cached: CachedCursorResponse? = readCache(at: configuration.cursorCacheURL)
+
         guard var credentials = CursorCredentialsLoader.load() else {
-            if !CursorCredentialsLoader.cursorAppSupportExists() {
-                return signedOutUsage(providerName: "Cursor")
-            }
             return signedOutUsage(providerName: "Cursor")
         }
 
-        if let cached: CachedCursorResponse = readCache(at: configuration.cursorCacheURL),
+        if let cached,
            Date().timeIntervalSince(cached.fetchedAt) < configuration.minOAuthInterval {
             return cursorProviderUsage(from: cached, freshness: .cached, detailNote: nil)
         }
@@ -410,22 +420,22 @@ public actor Refresher {
         }
 
         switch await fetchCursorUsage(credentials: credentials) {
-        case .success(let cached):
-            writeCache(cached, at: configuration.cursorCacheURL)
-            return cursorProviderUsage(from: cached, freshness: .live, detailNote: nil)
+        case .success(let fresh):
+            writeCache(fresh, at: configuration.cursorCacheURL)
+            return cursorProviderUsage(from: fresh, freshness: .live, detailNote: nil)
         case .failure(let err):
             if shouldRefreshAfterCursorFailure(err),
                let refreshed = await refreshCursorAuth(credentials),
                refreshed.accessToken != credentials.accessToken {
                 switch await fetchCursorUsage(credentials: refreshed) {
-                case .success(let cached):
-                    writeCache(cached, at: configuration.cursorCacheURL)
-                    return cursorProviderUsage(from: cached, freshness: .live, detailNote: "token refreshed")
+                case .success(let fresh):
+                    writeCache(fresh, at: configuration.cursorCacheURL)
+                    return cursorProviderUsage(from: fresh, freshness: .live, detailNote: "token refreshed")
                 case .failure:
                     break
                 }
             }
-            if let cached: CachedCursorResponse = readCache(at: configuration.cursorCacheURL) {
+            if let cached {
                 let age = Int(Date().timeIntervalSince(cached.fetchedAt) / 60)
                 return cursorProviderUsage(
                     from: cached,
@@ -572,6 +582,10 @@ public actor Refresher {
     private struct CachedCodexResponse: Codable {
         let fetchedAt: Date
         let response: CodexUsageClient.Response
+        /// Plan label derived from auth at fetch time, cached so cache-fresh
+        /// ticks don't need to re-read auth.json just to recover it. Optional so
+        /// caches written by older builds still decode.
+        let planLabel: String?
     }
 
     private struct CachedCursorResponse: Codable {

@@ -90,10 +90,19 @@ final class RefreshController: ObservableObject {
 
         let next = await refresher.snapshot(showRemainingPercent: showRemainingPercent)
         applyDefaultDensityIfNeeded(state: next)
+        let previous = self.state
         self.state = next
-        writeState(next)
-        UsageNotifier.shared.evaluate(state: visibleState(from: next), enabled: lowHeadroomWarnings)
-        WidgetCenter.shared.reloadAllTimelines()
+
+        // The live endpoints are throttled to a few minutes, so most ticks just
+        // re-read the same cache and produce identical numbers — only the
+        // timestamp moved. Skip the disk write + cross-process widget reload
+        // unless the visible content actually changed.
+        let nextVisible = visibleState(from: next)
+        if !nextVisible.hasSameContent(as: visibleState(from: previous)) {
+            writeState(next)
+            WidgetCenter.shared.reloadAllTimelines()
+        }
+        UsageNotifier.shared.evaluate(state: nextVisible, enabled: lowHeadroomWarnings)
     }
 
     private func applyDefaultDensityIfNeeded(state: UsageState) {

@@ -71,26 +71,61 @@ public struct CodexUsageReader: Sendable {
         let secondary: WindowUsage?
     }
 
-    /// Streams a JSONL file backwards (last line first) to find the most recent rate_limits.
-    /// We don't need to fully parse — we use a substring match before invoking JSONDecoder
-    /// to keep this fast over multi-MB files.
+    /// Scans a JSONL file backwards (last line first) to find the most recent
+    /// rate_limits, without materializing the whole file as a String or as an
+    /// array of lines. Each `\n`-delimited line is checked for the
+    /// `"rate_limits"` substring before invoking the JSON parser, so this stays
+    /// fast and low-allocation over multi-MB session files.
     private func latestRateLimits(in file: URL) -> Snapshot? {
-        guard let data = try? Data(contentsOf: file, options: .mappedIfSafe),
-              let text = String(data: data, encoding: .utf8) else { return nil }
+        guard let data = try? Data(contentsOf: file, options: .mappedIfSafe) else { return nil }
+        let needle = Array("\"rate_limits\"".utf8)
+        let newline = UInt8(ascii: "\n")
 
-        // Iterate lines newest first.
-        let lines = text.split(omittingEmptySubsequences: true) { $0.isNewline }
-        for line in lines.reversed() {
-            guard line.contains("\"rate_limits\"") else { continue }
-            if let snap = decodeSnapshot(from: line) {
-                return snap
+        return data.withUnsafeBytes { rawBuffer -> Snapshot? in
+            let bytes = rawBuffer.bindMemory(to: UInt8.self)
+            guard let base = bytes.baseAddress else { return nil }
+            var end = bytes.count
+            while end > 0 {
+                // The current line spans [start, end); walk back to the newline
+                // that precedes it (or the start of the file).
+                var start = end
+                while start > 0 && bytes[start - 1] != newline { start -= 1 }
+                if end > start,
+                   bufferContains(bytes, start: start, end: end, needle: needle) {
+                    let lineData = Data(bytes: base.advanced(by: start), count: end - start)
+                    if let snap = decodeSnapshot(fromUTF8: lineData) { return snap }
+                }
+                if start == 0 { break }
+                end = start - 1 // step over the newline onto the previous line
             }
+            return nil
         }
-        return nil
     }
 
-    private func decodeSnapshot<S: StringProtocol>(from line: S) -> Snapshot? {
-        guard let data = String(line).data(using: .utf8) else { return nil }
+    /// Naive substring search of `needle` within `bytes[start..<end]`.
+    private func bufferContains(
+        _ bytes: UnsafeBufferPointer<UInt8>,
+        start: Int,
+        end: Int,
+        needle: [UInt8]
+    ) -> Bool {
+        let n = needle.count
+        guard n > 0, end - start >= n else { return false }
+        let first = needle[0]
+        var i = start
+        let last = end - n
+        while i <= last {
+            if bytes[i] == first {
+                var k = 1
+                while k < n && bytes[i + k] == needle[k] { k += 1 }
+                if k == n { return true }
+            }
+            i += 1
+        }
+        return false
+    }
+
+    private func decodeSnapshot(fromUTF8 data: Data) -> Snapshot? {
         guard let any = try? JSONSerialization.jsonObject(with: data) else { return nil }
         // The rate_limits object can sit anywhere in the event. Walk recursively.
         guard let rl = findRateLimits(any) else { return nil }

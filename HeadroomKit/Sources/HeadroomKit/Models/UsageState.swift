@@ -128,4 +128,15 @@ public struct UsageState: Codable, Sendable, Equatable {
         showRemainingPercent: false,
         lastUpdated: .distantPast
     )
+
+    /// Equatable comparison that ignores `lastUpdated`. Two snapshots taken a
+    /// minute apart usually carry identical usage numbers (the live endpoints
+    /// are throttled to once every few minutes), so only the timestamp moved.
+    /// Callers use this to skip redundant disk writes and widget reloads.
+    public func hasSameContent(as other: UsageState) -> Bool {
+        claude == other.claude
+            && codex == other.codex
+            && cursor == other.cursor
+            && showRemainingPercent == other.showRemainingPercent
+    }
 }

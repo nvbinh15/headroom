@@ -29,20 +29,28 @@ signed build of the app (see TESTING.md).
   stores in `~/.claude/.credentials.json` or in your macOS keychain (service:
   `Claude Code-credentials`). After a successful keychain read, Headroom caches
   the credential in its own keychain item so timer refreshes don't repeatedly
-  ask macOS for Claude Code keychain access. This is the same endpoint the
-  `/usage` slash command uses internally. Throttled to one request per 5 min
-  and cached to disk so a 429 doesn't blank the widget.
+  ask macOS for Claude Code keychain access. If that login is missing or
+  expired, Headroom falls back to the **Claude desktop app's** login
+  (`oauth:tokenCacheV2` in `~/Library/Application Support/Claude/config.json`,
+  encrypted with the "Claude Safe Storage" keychain key), used read-only so it
+  never signs the desktop app out. This is the same endpoint the `/usage` slash
+  command uses internally. Throttled to one request per 5 min and cached to
+  disk so a 429 doesn't blank the widget. (The endpoint answers an *expired*
+  token with 429, so Headroom never sends one.)
 - **Cursor** — calls `POST api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage`
   with the OAuth bearer Cursor stores in
   `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`
-  (key `cursorAuth/accessToken`). Falls back to `GET api2.cursor.sh/auth/usage`
-  for enterprise request-based plans. If the token is expired and a refresh token
-  is present, Headroom refreshes via `POST api2.cursor.sh/oauth/token` and writes
-  the updated token back to the same SQLite store. Throttled to once every 5 min
+  (key `cursorAuth/accessToken`). Cursor 3.x stores it encrypted
+  (`cursor-safe-storage:v1:…`); Headroom decrypts it with the "Cursor Safe
+  Storage" keychain key and uses it read-only. Falls back to `GET api2.cursor.sh/auth/usage`
+  for enterprise request-based plans. For older, unencrypted logins with an
+  expired token, Headroom refreshes via `POST api2.cursor.sh/oauth/token` and
+  writes the updated token back to the same SQLite store. Throttled to once every 5 min
   and disk-cached. Shows Auto + API usage percentages for the current billing cycle.
 
-If the OAuth call fails persistently and there's no cached response, falls back
-to a local-jsonl token estimator using your detected plan tier
+If the Claude login has expired everywhere, the popover says "sign-in expired"
+instead of guessing. If the OAuth call fails for another reason and there's no
+cached response, falls back to a local-jsonl token estimator using your detected plan tier
 (`rateLimitTier` in the credential blob — `default_claude_pro`,
 `default_claude_max_5x`, etc.). The estimator is rough; the API is the truth.
 
@@ -101,6 +109,7 @@ HeadroomKit/                      # SwiftPM library + CLI
     Readers/ClaudeUsageReader.swift  # local-jsonl estimator (fallback)
     Readers/KeychainCredentials.swift
     Readers/CursorCredentials.swift  # reads Cursor IDE SQLite auth
+    Readers/ElectronSafeStorage.swift # decrypts Claude desktop / Cursor tokens
     Network/OAuthUsageClient.swift   # /api/oauth/usage
     Network/CursorUsageClient.swift  # GetCurrentPeriodUsage
     Refresher.swift                  # ties API + cache + fallback together
@@ -124,8 +133,13 @@ entitlement (which requires a paid signing identity).
 
 ## Notes / limitations
 
-- **Ad-hoc signed.** Build & run on your own machine works; redistribution would
-  need a real signing identity and proper App Group entitlement.
+- **Signing.** `scripts/build-dmg.sh` signs with your "Developer ID Application"
+  or "Apple Development" certificate if you have one (override with
+  `SIGN_IDENTITY=…`), else ad-hoc. A real certificate keeps the signature stable,
+  so macOS asks for each keychain item once and remembers "Always Allow" across
+  updates; ad-hoc builds re-prompt after every rebuild. On other Macs Gatekeeper
+  still warns unless the build is Developer ID signed and notarized (paid Apple
+  Developer Program).
 - **Plan tier auto-detected.** If you switch plans, restart the app so it
   re-reads the keychain credential.
 - **`/api/oauth/usage` is rate-limited.** The 5-min throttle keeps us well under

@@ -153,12 +153,12 @@
 <main>
   <div class="eyebrow">Privacy &amp; Data</div>
   <h1>What Headroom reads, what it sends.</h1>
-  <p class="updated">Last updated: 2026-05-17</p>
+  <p class="updated">Last updated: 2026-11-20</p>
 
   <p>Headroom is a macOS menu-bar app that displays the rate-limit headroom for Claude Code, the Codex CLI, and Cursor. It is an independent, open-source project and is <strong>not affiliated with Anthropic, OpenAI, or Cursor</strong>.</p>
 
   <div class="callout">
-    The summary: Headroom runs entirely on your machine. It reads the local credentials Claude Code, Codex, and Cursor already store on this device, calls each service's own usage endpoint, and displays the result. There is no Headroom-operated server, no analytics, no telemetry, and no third-party data collection.
+    The summary: Headroom runs entirely on your machine. It reads the local credentials Claude Code, the Claude desktop app, Codex, and Cursor already store on this device, calls each service's own usage endpoint, and displays the result. There is no Headroom-operated server, no analytics, no telemetry, and no third-party data collection.
   </div>
 
   <h2>What Headroom reads from your machine</h2>
@@ -168,12 +168,14 @@
     <li><code>~/.codex/sessions/**/*.jsonl</code> — the rate-limit snapshots Codex persists per session. Used only as a fallback when the live endpoint is unreachable.</li>
     <li><code>~/.claude/.credentials.json</code> — the OAuth bearer token written by Claude Code on versions that store credentials on disk.</li>
     <li><code>~/.claude/projects/**/*.jsonl</code> — the local conversation logs Claude Code writes per project. Used only as a fallback estimator when the live endpoint is unreachable, and only to count tokens.</li>
-    <li><code>~/Library/Application Support/Cursor/User/globalStorage/state.vscdb</code> — the SQLite database where Cursor IDE stores its OAuth bearer token (<code>cursorAuth/accessToken</code>) and refresh token.</li>
+    <li><code>~/Library/Application Support/Claude/config.json</code> — the Claude desktop app's encrypted OAuth token cache (<code>oauth:tokenCacheV2</code>). Used only when Claude Code's own login is missing or expired. Headroom decrypts it locally, uses the access token read-only, and never refreshes or modifies it.</li>
+    <li><code>~/Library/Application Support/Cursor/User/globalStorage/state.vscdb</code> — the SQLite database where Cursor IDE stores its OAuth bearer token (<code>cursorAuth/accessToken</code>) and refresh token. Cursor 3.x encrypts these; Headroom decrypts them locally and uses them read-only.</li>
     <li><code>~/Library/Application Support/Headroom/claude-credentials.json</code> — Headroom's local copy of the Claude OAuth blob. Written after the first successful read so timer refreshes don't repeatedly ask macOS for Claude Code keychain access.</li>
   </ul>
   <p>From the macOS keychain:</p>
   <ul>
-    <li>The keychain item with service name <code>Claude Code-credentials</code> — the OAuth bearer token written by Claude Code when you sign in. Headroom reads this at most once (or again after an API 401), then caches it to the file above.</li>
+    <li>The keychain item with service name <code>Claude Code-credentials</code> — the OAuth bearer token written by Claude Code when you sign in. Headroom reads this once, then caches it to the file above; it reads it again only when the cached login is rejected or has expired.</li>
+    <li>The keychain items <code>Claude Safe Storage</code> and <code>Cursor Safe Storage</code> — the keys those Electron apps use to encrypt their stored tokens. Headroom reads them only to decrypt the tokens above, on your machine. macOS asks for your approval the first time.</li>
     <li>The keychain items <code>cursor-access-token</code> and <code>cursor-refresh-token</code> — OAuth tokens written by the Cursor CLI when present.</li>
   </ul>
 
@@ -184,13 +186,16 @@
     <li><code>GET https://chatgpt.com/backend-api/wham/usage</code> — the same endpoint the Codex CLI calls on launch. Authorized with the Codex bearer token and ChatGPT account ID.</li>
     <li><code>POST https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage</code> — Cursor's dashboard usage endpoint. Authorized with the Cursor bearer token.</li>
     <li><code>GET https://api2.cursor.sh/auth/usage</code> — legacy request-based usage for some enterprise plans. Authorized with the Cursor bearer token.</li>
-    <li><code>POST https://api2.cursor.sh/oauth/token</code> — refreshes an expired Cursor access token when a refresh token is available. Headroom writes the new token back to the same local store it was read from.</li>
+    <li><code>POST https://api2.cursor.sh/aiserver.v1.DashboardService/GetPlanInfo</code> — your Cursor plan name, shown next to the usage. Authorized with the Cursor bearer token.</li>
+    <li><code>POST https://api2.cursor.sh/oauth/token</code> — refreshes an expired, unencrypted Cursor access token when a refresh token is available. Headroom writes the new token back to the same local store it was read from.</li>
+    <li><code>POST https://platform.claude.com/v1/oauth/token</code> — refreshes an expired Claude Code access token. The new token is stored only in Headroom's local copy (above). Never used for the Claude desktop app's token.</li>
+    <li><code>POST https://auth.openai.com/oauth/token</code> — refreshes an expired Codex access token. Headroom writes the new token back to <code>~/.codex/auth.json</code>.</li>
   </ul>
   <p>That is the complete list. Headroom does not transmit your tokens, your usage, your machine identifiers, or anything else to any other server. Requests are throttled internally to once every five minutes and cached on disk so the app can keep working under rate limits.</p>
 
   <h2>Where data is stored</h2>
   <ul>
-    <li><code>~/Library/Caches/Headroom/</code> — the most recent JSON response from each service, used for fallback when the API is unavailable. Delete it any time via <strong>Settings ▸ Reset caches</strong>.</li>
+    <li><code>~/Library/Caches/Headroom/</code> — the most recent JSON response from each service, used for fallback when the API is unavailable. Skip it for one provider via <strong>Settings ▸ Data ▸ Refresh now</strong>, or delete the folder any time.</li>
     <li>macOS keychain service <code>Headroom-ClaudeCredentialsCache</code> — legacy local copy; newer builds prefer <code>claude-credentials.json</code> instead.</li>
     <li><code>~/Library/Application Support/Headroom/state.json</code> — the snapshot the menu bar and widget read from. Contains percentages and reset times, no tokens.</li>
   </ul>

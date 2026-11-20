@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# Build an unsigned (ad-hoc signed) Headroom.dmg for distribution.
+# Build a signed Headroom.dmg.
 #
 # Output: build/Headroom.dmg
 # Tools:  xcodegen, create-dmg  (brew install both)
 #
-# Note: the resulting .app is ad-hoc signed, so first-launch will require
-# right-click → Open under Gatekeeper. The widget extension will not be
-# usable until the build is signed with a real Developer ID.
+# Signing: uses $SIGN_IDENTITY if set, else the first "Developer ID Application"
+# or "Apple Development" certificate in your keychain, else ad-hoc ("-").
+# A real certificate keeps the code signature stable across builds, so macOS
+# remembers "Always Allow" keychain approvals after updates. Gatekeeper still
+# warns on other Macs unless the build is Developer ID signed and notarized.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -27,6 +29,23 @@ require() {
 require xcodegen
 require create-dmg
 
+pick_identity() {
+  security find-identity -v -p codesigning | grep -oE "\"$1: [^\"]+\"" | head -1 | tr -d '"' || true
+}
+if [[ -z "${SIGN_IDENTITY:-}" ]]; then
+  SIGN_IDENTITY=$(pick_identity "Developer ID Application")
+  [[ -n "$SIGN_IDENTITY" ]] || SIGN_IDENTITY=$(pick_identity "Apple Development")
+  SIGN_IDENTITY=${SIGN_IDENTITY:--}
+fi
+TEAM_ID=""
+if [[ "$SIGN_IDENTITY" != "-" ]]; then
+  TEAM_ID=$(security find-certificate -c "$SIGN_IDENTITY" -p | openssl x509 -noout -subject \
+    | grep -oE 'OU ?= ?[A-Z0-9]{10}' | grep -oE '[A-Z0-9]{10}$' || true)
+fi
+# Notarization requires the hardened runtime; only Developer ID builds get notarized.
+HARDENED=NO
+[[ "$SIGN_IDENTITY" == "Developer ID Application"* ]] && HARDENED=YES
+
 echo "→ Generating Xcode project"
 xcodegen generate --quiet
 
@@ -34,20 +53,22 @@ echo "→ Cleaning $BUILD_DIR/"
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 
-echo "→ Archiving (Release, ad-hoc signed)"
+echo "→ Archiving (Release, signed with: $SIGN_IDENTITY${TEAM_ID:+ / team $TEAM_ID})"
 xcodebuild \
   -project "$APP_NAME.xcodeproj" \
   -scheme "$SCHEME" \
   -configuration Release \
   -destination "generic/platform=macOS" \
   -archivePath "$ARCHIVE_PATH" \
-  CODE_SIGN_IDENTITY="-" \
+  CODE_SIGN_IDENTITY="$SIGN_IDENTITY" \
   CODE_SIGN_STYLE=Manual \
-  DEVELOPMENT_TEAM="" \
+  DEVELOPMENT_TEAM="$TEAM_ID" \
+  ENABLE_HARDENED_RUNTIME="$HARDENED" \
   clean archive
 
 echo "→ Extracting .app from archive"
 cp -R "$ARCHIVE_PATH/Products/Applications/$APP_NAME.app" "$APP_PATH"
+codesign --verify --deep --strict "$APP_PATH"
 
 echo "→ Building DMG"
 rm -f "$DMG_PATH"

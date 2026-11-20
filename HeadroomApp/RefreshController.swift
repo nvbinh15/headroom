@@ -143,18 +143,36 @@ final class RefreshController: ObservableObject {
 
     // MARK: - Settings actions
 
-    func clearAPICachesAndRefresh() async {
-        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-        let dir = caches.appendingPathComponent("Headroom", isDirectory: true)
-        try? FileManager.default.removeItem(at: dir.appendingPathComponent("claude-oauth-usage.json"))
-        try? FileManager.default.removeItem(at: dir.appendingPathComponent("codex-wham-usage.json"))
-        try? FileManager.default.removeItem(at: dir.appendingPathComponent("cursor-usage.json"))
+    enum Provider: String, CaseIterable, Identifiable {
+        case claude = "Claude", codex = "Codex", cursor = "Cursor"
+        var id: Self { self }
+    }
+
+    /// Drops one provider's cached API response (and, for Claude, Headroom's copy
+    /// of the login) so the refresh fetches it live instead of waiting out the
+    /// 5-minute throttle.
+    func forceRefresh(_ provider: Provider) async {
+        let config = await refresher.configuration
+        let cache: URL
+        switch provider {
+        case .claude:
+            KeychainCredentialsLoader.deleteHeadroomCredentialsFile()
+            cache = config.claudeCacheURL
+        case .codex:
+            cache = config.codexCacheURL
+        case .cursor:
+            cache = config.cursorCacheURL
+        }
+        try? FileManager.default.removeItem(at: cache)
         await refresh()
     }
 
-    func rereadClaudeLoginAndRefresh() async {
-        KeychainCredentialsLoader.deleteHeadroomCredentialsFile()
-        await clearAPICachesAndRefresh()
+    func isConfigured(_ provider: Provider) -> Bool {
+        switch provider {
+        case .claude: return state.claude.isConfigured
+        case .codex: return state.codex.isConfigured
+        case .cursor: return state.cursor.isConfigured
+        }
     }
 
     /// Reveals the shared-state directory in Finder.

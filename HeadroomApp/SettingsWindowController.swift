@@ -43,14 +43,17 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         )
         host.translatesAutoresizingMaskIntoConstraints = false
         glass.addSubview(host)
+        window.contentView = glass
+
+        // Glass fills the whole window (incl. the transparent title bar), but the
+        // form starts below the title bar so scrolled content doesn't slide under it.
+        let titleBarBottom = (window.contentLayoutGuide as? NSLayoutGuide)?.topAnchor ?? glass.topAnchor
         NSLayoutConstraint.activate([
             host.leadingAnchor.constraint(equalTo: glass.leadingAnchor),
             host.trailingAnchor.constraint(equalTo: glass.trailingAnchor),
-            host.topAnchor.constraint(equalTo: glass.topAnchor),
+            host.topAnchor.constraint(equalTo: titleBarBottom),
             host.bottomAnchor.constraint(equalTo: glass.bottomAnchor)
         ])
-
-        window.contentView = glass
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) not used") }

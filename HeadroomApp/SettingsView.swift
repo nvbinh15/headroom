@@ -130,28 +130,27 @@ struct SettingsView: View {
             }
 
             Section {
-                HStack {
-                    Button("Clear API cache") {
-                        Task { await controller.clearAPICachesAndRefresh() }
+                LabeledContent("Refresh now") {
+                    HStack(spacing: 8) {
+                        ForEach(RefreshController.Provider.allCases) { provider in
+                            Button(provider.rawValue) {
+                                Task { await controller.forceRefresh(provider) }
+                            }
+                            .buttonStyle(HoverBackgroundButtonStyle())
+                            .disabled(controller.isRefreshing || !controller.isConfigured(provider))
+                        }
                     }
-                    .buttonStyle(HoverBackgroundButtonStyle())
-                    Button("Re-read Claude login") {
-                        Task { await controller.rereadClaudeLoginAndRefresh() }
-                    }
-                    .buttonStyle(HoverBackgroundButtonStyle())
-                    Spacer()
                 }
-                HStack {
+                LabeledContent("Local files") {
                     Button("Open data folder") {
                         controller.openDataFolder()
                     }
                     .buttonStyle(HoverBackgroundButtonStyle())
-                    Spacer()
                 }
             } header: {
                 Text("Data")
             } footer: {
-                Text("Clear API cache forces a fresh usage fetch. Re-read Claude login drops Headroom's cached copy and reads Claude Code's keychain again.")
+                Text("Refresh now fetches live usage for that provider, skipping the 5-minute cache. Claude also re-reads its login from Claude Code or the Claude desktop app.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -188,7 +187,8 @@ struct SettingsView: View {
                             "~/.codex/sessions/**/*.jsonl — used as a fallback when the API is unreachable",
                             "~/.claude/.credentials.json — Claude OAuth bearer when Claude Code stores it there",
                             "~/.claude/projects/**/*.jsonl — used as a fallback when the API is unreachable",
-                            "~/Library/Application Support/Cursor/User/globalStorage/state.vscdb — Cursor OAuth bearer",
+                            "~/Library/Application Support/Claude/config.json — Claude desktop app's encrypted OAuth bearer, used read-only when Claude Code's login is missing or expired",
+                            "~/Library/Application Support/Cursor/User/globalStorage/state.vscdb — Cursor OAuth bearer (encrypted by Cursor 3.x, used read-only)",
                             "~/Library/Application Support/Headroom/claude-credentials.json — Headroom's local Claude OAuth copy after the first successful read"
                         ]
                     )
@@ -196,6 +196,7 @@ struct SettingsView: View {
                         title: "Reads from macOS keychain",
                         items: [
                             "“Claude Code-credentials” — Claude OAuth bearer written by Claude Code (read once, then cached on disk)",
+                            "“Claude Safe Storage” / “Cursor Safe Storage” — keys to decrypt the desktop apps' tokens above (macOS asks once)",
                             "“cursor-access-token” / “cursor-refresh-token” — Cursor CLI OAuth when present"
                         ]
                     )
@@ -204,8 +205,9 @@ struct SettingsView: View {
                         items: [
                             "GET api.anthropic.com/api/oauth/usage",
                             "GET chatgpt.com/backend-api/wham/usage",
-                            "POST api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage",
-                            "GET api2.cursor.sh/auth/usage (enterprise fallback)"
+                            "POST api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage and /GetPlanInfo",
+                            "GET api2.cursor.sh/auth/usage (enterprise fallback)",
+                            "POST platform.claude.com, auth.openai.com, api2.cursor.sh /oauth/token — only to renew an expired CLI login"
                         ],
                         footnote: "Authorized with the bearer tokens above. No telemetry, analytics, or other data leaves your machine."
                     )

@@ -68,15 +68,53 @@ public enum KeychainCredentialsLoader {
             return credentials
         }
 
-        guard canAttemptClaudeKeychain(now: now) else { return nil }
-
-        if let data = readClaudeKeychainWithSecurityFramework(now: now),
+        if canAttemptClaudeKeychain(now: now),
+           let data = readClaudeKeychainWithSecurityFramework(now: now),
            let credentials = parseClaudeCredentials(data: data) {
             persist(credentials: credentials, rawData: data)
             return credentials
         }
 
-        return nil
+        return loadClaudeDesktop(now: now)
+    }
+
+    /// Reads the Claude desktop app's OAuth token (`oauth:tokenCacheV2` in its
+    /// config.json, encrypted with Electron safeStorage). Read-only: the refresh
+    /// token is dropped so Headroom never rotates the desktop app's login — the
+    /// app keeps the access token fresh itself.
+    public static func loadClaudeDesktop(now: Date = Date()) -> ClaudeCredentials? {
+        let url = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/Claude/config.json")
+        guard let data = try? Data(contentsOf: url),
+              let config = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let encoded = (config["oauth:tokenCacheV2"] ?? config["oauth:tokenCache"]) as? String,
+              let blob = Data(base64Encoded: encoded),
+              let plain = ElectronSafeStorage.decrypt(blob, keychainService: "Claude Safe Storage")
+        else { return nil }
+        guard let best = parseClaudeDesktopTokenCache(plain, now: now) else { return nil }
+        persistRefreshedClaude(best)
+        return best
+    }
+
+    /// Entries are keyed "acct:<uuid>|<clientId>:<org>:<baseURL>:<scopes>";
+    /// /api/oauth/usage needs the user:profile scope.
+    static func parseClaudeDesktopTokenCache(_ data: Data, now: Date) -> ClaudeCredentials? {
+        guard let entries = try? JSONSerialization.jsonObject(with: data) as? [String: [String: Any]] else { return nil }
+        return entries
+            .filter { $0.key.contains("user:profile") }
+            .compactMap { _, v -> ClaudeCredentials? in
+                guard let token = v["token"] as? String, !token.isEmpty,
+                      let exp = v["expiresAt"] as? Double else { return nil }
+                return ClaudeCredentials(
+                    accessToken: token,
+                    refreshToken: nil,
+                    expiresAt: dateFromClaudeExpiry(exp),
+                    subscriptionType: v["subscriptionType"] as? String,
+                    rateLimitTier: v["rateLimitTier"] as? String
+                )
+            }
+            .filter { !$0.isExpired(now: now) }
+            .max { ($0.expiresAt ?? .distantPast) < ($1.expiresAt ?? .distantPast) }
     }
 
     /// Re-read Claude Code's keychain item and refresh the on-disk cache. Intended

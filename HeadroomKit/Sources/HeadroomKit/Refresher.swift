@@ -69,12 +69,17 @@ public actor Refresher {
         var plan = creds?.plan ?? .unknown
         let planLabel = plan.displayName
 
-        if let current = creds,
-           current.needsRefresh(),
-           current.canRefresh,
-           let refreshed = await refreshClaudeAuth(current) {
-            creds = refreshed
-            plan = refreshed.plan
+        // Never send an expired token — the API answers it with 429, not 401,
+        // so the failure path below would never recover.
+        var signInExpired = false
+        if let current = creds, current.needsRefresh() {
+            creds = await recoverClaudeAuth(current)
+            if let fresh = creds, !fresh.needsRefresh() {
+                plan = fresh.plan
+            } else {
+                creds = nil
+                signInExpired = true
+            }
         }
 
         // Read the on-disk cache once and reuse it for both the freshness check
@@ -98,8 +103,7 @@ public actor Refresher {
             case .failure(let err):
                 if shouldRefreshClaudeAfterFailure(err) {
                     if let current = creds,
-                       let refreshed = await refreshClaudeAuth(current)
-                       ?? KeychainCredentialsLoader.reloadClaudeFromKeychain() {
+                       let refreshed = await recoverClaudeAuth(current) {
                         creds = refreshed
                         plan = refreshed.plan
                         switch await claudeClient.fetch(token: refreshed.accessToken) {
@@ -129,7 +133,8 @@ public actor Refresher {
                 )
             }
         }
-        // Token unreadable, but a prior API response may still be on disk.
+        let authNote = signInExpired ? "sign-in expired · open Claude or run `claude` /login" : "no keychain auth"
+        // Token unusable, but a prior API response may still be on disk.
         if let cached {
             let age = Int(Date().timeIntervalSince(cached.fetchedAt) / 60)
             return claudeProviderUsage(
@@ -137,7 +142,14 @@ public actor Refresher {
                 planLabel: planLabel,
                 freshness: .stale,
                 staleAgeMinutes: age,
-                detailNote: "no keychain auth"
+                detailNote: authNote
+            )
+        }
+        if signInExpired {
+            return ProviderUsage(isConfigured: true).withMetadata(
+                planLabel: planLabel,
+                freshness: .offline,
+                detailNote: authNote
             )
         }
         // No keychain creds. If the user has never run Claude Code locally either,
@@ -154,6 +166,20 @@ public actor Refresher {
             freshness: .estimate,
             detailNote: "no keychain auth"
         )
+    }
+
+    /// A usable token from wherever the user is signed in: Claude Code's keychain
+    /// (after `claude /login`), the Claude desktop app, or else an OAuth refresh.
+    private func recoverClaudeAuth(_ current: ClaudeCredentials) async -> ClaudeCredentials? {
+        let sources: [() -> ClaudeCredentials?] = [
+            { KeychainCredentialsLoader.reloadClaudeFromKeychain() },
+            { KeychainCredentialsLoader.loadClaudeDesktop() }
+        ]
+        if let fresh = sources.lazy.compactMap({ $0() })
+            .first(where: { !$0.needsRefresh() && $0.accessToken != current.accessToken }) {
+            return fresh
+        }
+        return await refreshClaudeAuth(current)
     }
 
     private func refreshClaudeAuth(_ creds: ClaudeCredentials) async -> ClaudeCredentials? {

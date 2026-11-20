@@ -34,6 +34,7 @@ public enum CursorCredentialsLoader {
     private static let membershipTypeKey = "cursorAuth/stripeMembershipType"
     private static let keychainAccessService = "cursor-access-token"
     private static let keychainRefreshService = "cursor-refresh-token"
+    private static let encryptedPrefix = "cursor-safe-storage:v1:"
 
     public static func defaultStateDatabaseURL(
         fileManager: FileManager = .default
@@ -78,10 +79,27 @@ public enum CursorCredentialsLoader {
     }
 
     static func loadFromSQLite(at url: URL) -> CursorCredentials? {
-        guard let accessToken = readSQLiteValue(key: accessTokenKey, at: url)?
+        guard let stored = readSQLiteValue(key: accessTokenKey, at: url)?
             .trimmingCharacters(in: .whitespacesAndNewlines),
-              !accessToken.isEmpty
+              !stored.isEmpty
         else { return nil }
+
+        // Cursor ≥ 3.x encrypts tokens: "cursor-safe-storage:v1:<base64 safeStorage blob>".
+        // Use them read-only (no refresh): writing plaintext back or rotating the
+        // refresh token would sign Cursor out. Cursor keeps the token fresh itself.
+        if stored.hasPrefix(encryptedPrefix) {
+            guard let blob = Data(base64Encoded: String(stored.dropFirst(encryptedPrefix.count))),
+                  let plain = ElectronSafeStorage.decrypt(blob, keychainService: "Cursor Safe Storage"),
+                  let accessToken = String(data: plain, encoding: .utf8), !accessToken.isEmpty
+            else { return nil }
+            return CursorCredentials(
+                accessToken: accessToken,
+                refreshToken: nil,
+                membershipType: readSQLiteValue(key: membershipTypeKey, at: url),
+                source: .sqlite(url)
+            )
+        }
+        let accessToken = stored
 
         return CursorCredentials(
             accessToken: accessToken,
